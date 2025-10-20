@@ -2,6 +2,7 @@
 
 This project is a Security Information and Event Management (SIEM) platform built with a Django backend and a React frontend.
 
+
 ## Features
 - Multi-tenancy support
 - JWT-based authentication
