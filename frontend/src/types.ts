@@ -11,6 +11,10 @@ export interface DashboardData {
   severity: Record<string, number>;
   timeline: Record<string, number>;
   total: number;
+  source?: string;
+  source_index?: Record<string, number>;
+  daily_trend?: Record<string, number>;
+  top_keywords?: Record<string, number>;
 }
 
 export interface Ticket {

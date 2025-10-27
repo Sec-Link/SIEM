@@ -12,7 +12,7 @@ const LoginForm: React.FC<Props> = ({ onLogin }) => {
     console.log('Submitting form with values:', values); // 调试日志
     setLoading(true);
     try {
-      const res = await login(values.username, values.password);
+  const res = await login(values.username, values.password, values.tenant_id);
       message.success(`登录成功 Tenant: ${res.tenant_id}`);
       onLogin();
     } catch (e:any) {
@@ -40,10 +40,17 @@ const LoginForm: React.FC<Props> = ({ onLogin }) => {
           }} 
           style={{ maxWidth: 320, margin: '0 auto' }}
         >
-          <Form.Item 
-            name="username" 
-            rules={[{ required: true, message: '请输入用户名' }]}
-          >
+            <Form.Item 
+              name="tenant_id"
+              rules={[]}
+            >
+              <Input placeholder="Tenant (optional) - e.g. tenant_a" />
+            </Form.Item>
+
+            <Form.Item 
+              name="username" 
+              rules={[{ required: true, message: '请输入用户名' }]}
+            >
             <Input 
               prefix={<UserOutlined style={{ color: 'rgba(0,0,0,.25)' }} />} 
               placeholder="用户名" 
