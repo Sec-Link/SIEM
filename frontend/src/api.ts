@@ -17,8 +17,10 @@ client.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-export async function login(username: string, password: string) {
-  const res = await client.post('/auth/login/', { username, password });
+export async function login(username: string, password: string, tenant_id?: string) {
+  const payload: any = { username, password };
+  if (tenant_id) payload.tenant_id = tenant_id;
+  const res = await client.post('/auth/login/', payload);
   setAccessToken(res.data.access);
   return res.data;
 }
@@ -28,8 +30,10 @@ export async function fetchAlerts(page = 1, page_size = 20) {
   return res.data;
 }
 
-export async function fetchDashboard() {
-  const res = await client.get('/alerts/dashboard/');
+export async function fetchDashboard(force_es?: boolean) {
+  let url = '/alerts/dashboard/';
+  if (force_es) url += '?force_es=1';
+  const res = await client.get(url);
   return res.data;
 }
 
@@ -40,5 +44,25 @@ export async function fetchTickets() {
 
 export async function createTicket(payload: Partial<{ title: string; description: string; related_alert_id?: string }>) {
   const res = await client.post('/tickets/', { ...payload, status: 'Open' });
+  return res.data;
+}
+
+export async function getESConfig() {
+  const res = await client.get('/alerts/config/es/');
+  return res.data;
+}
+
+export async function setESConfig(payload: any) {
+  const res = await client.post('/alerts/config/es/', payload);
+  return res.data;
+}
+
+export async function getWebhookConfig() {
+  const res = await client.get('/alerts/config/webhook/');
+  return res.data;
+}
+
+export async function setWebhookConfig(payload: any) {
+  const res = await client.post('/alerts/config/webhook/', payload);
   return res.data;
 }

@@ -6,17 +6,37 @@ This project is a multi-tenant SIEM platform with both backend and frontend coll
 ```
 SIEM/
 ├── backend/   # Django backend
-│   ├── users/         # User management module
-│   ├── alerts/        # Alert management module
-│   ├── tickets/       # Ticket management module
-│   └── settings.py    # Global settings
+│   ├── .venv/         # Virtual environment (optional, may not exist in all setups)
+│   ├── README.md      # Backend-specific documentation
+│   ├── db.sqlite3     # SQLite database file (for development)
+│   ├── manage.py      # Django's command-line utility
+│   ├── requirements.txt # Python dependencies
+│   ├── siem_project/  # Main Django project folder
+│   │   ├── __init__.py
+│   │   ├── settings.py # Global settings for the project
+│   │   ├── urls.py     # URL routing for the project
+│   │   ├── wsgi.py     # WSGI entry point for deployment
+│   ├── users/         # User management app
+│   ├── es_integration/ # Elasticsearch integration app
+│   ├── ticketing/     # Ticketing system app
 ├── frontend/  # React frontend
-│   ├── src/
-│   │   ├── components/  # Components
-│   │   ├── pages/        # Pages
-│   │   └── api.ts        # Frontend API
-├── README.md  # Project documentation
-└── CONTRIBUTING.md  # Contribution guidelines
+│   ├── README.md       # Frontend-specific documentation
+│   ├── node_modules/   # Dependencies (auto-generated, do not modify manually)
+│   ├── package.json    # Project metadata and dependencies
+│   ├── package-lock.json # Dependency lock file
+│   ├── public/         # Static files (e.g., index.html)
+│   ├── src/            # Source code
+│   │   ├── App.tsx     # Main application component
+│   │   ├── api.ts      # API interaction logic
+│   │   ├── components/ # Reusable components
+│   │   │   ├── AlertList.tsx  # Alert list component
+│   │   │   ├── Dashboard.tsx  # Dashboard component
+│   │   │   ├── LoginForm.tsx  # Login form component
+│   │   │   ├── TicketList.tsx # Ticket list component
+│   │   ├── index.tsx   # Entry point for the React app
+│   │   ├── types.ts    # TypeScript type definitions
+│   ├── tsconfig.json   # TypeScript configuration
+│   ├── webpack.config.js # Webpack configuration for bundling
 ```
 
 ## Responsibilities
@@ -222,3 +242,148 @@ By following these steps, you can successfully bind the dashboard app with Elast
 ---
 
 If you have any questions, contact the project owner.
+
+### Django Settings Overview for Beginners
+
+If you are new to Django and Python, here is a simplified explanation of the `settings.py` file and how it works in this project.
+
+#### What is `settings.py`?
+- `settings.py` is a configuration file for the Django backend. It tells Django how to behave, which apps to use, and how to connect to databases and other services.
+- Think of it as a "control panel" for the backend.
+
+#### Key Sections in `settings.py`
+
+1. **Base Directory (`BASE_DIR`)**:
+   - This defines the root folder of the project. It is used to build paths for other files (e.g., the database file).
+   - Example:
+     ```python
+     BASE_DIR = Path(__file__).resolve().parent.parent
+     ```
+
+2. **Installed Apps (`INSTALLED_APPS`)**:
+   - This is a list of all the apps (or modules) that Django should use.
+   - In this project, the apps include:
+     - `users`: Handles user authentication and management.
+     - `es_integration`: Manages Elasticsearch interactions.
+     - `ticketing`: Manages ticket creation and updates.
+   - Example:
+     ```python
+     INSTALLED_APPS = [
+         'django.contrib.admin',
+         'django.contrib.auth',
+         'rest_framework',
+         'users',
+         'es_integration',
+         'ticketing',
+     ]
+     ```
+
+3. **Middleware (`MIDDLEWARE`)**:
+   - Middleware is like a security checkpoint. It processes requests and responses before they reach your app.
+   - Example:
+     ```python
+     MIDDLEWARE = [
+         'django.middleware.security.SecurityMiddleware',
+         'django.middleware.common.CommonMiddleware',
+     ]
+     ```
+
+4. **Database Configuration (`DATABASES`)**:
+   - This tells Django where to store data. In this project, we use SQLite for development.
+   - Example:
+     ```python
+     DATABASES = {
+         'default': {
+             'ENGINE': 'django.db.backends.sqlite3',
+             'NAME': BASE_DIR / 'db.sqlite3',
+         }
+     }
+     ```
+
+5. **Static Files (`STATIC_URL`)**:
+   - This is where Django looks for static files like CSS and JavaScript.
+   - Example:
+     ```python
+     STATIC_URL = 'static/'
+     ```
+
+6. **Logging Configuration (`LOGGING`)**:
+   - This defines how logs are displayed. Logs help you debug issues.
+   - Example:
+     ```python
+     LOGGING = {
+         'version': 1,
+         'handlers': {
+             'console': {
+                 'class': 'logging.StreamHandler',
+             }
+         },
+         'loggers': {
+             'users': {
+                 'handlers': ['console'],
+                 'level': 'INFO',
+             },
+         }
+     }
+     ```
+
+#### How to Modify `settings.py`
+1. Open the file located at `backend/siem_project/settings.py`.
+2. Make changes based on your requirements (e.g., adding a new app to `INSTALLED_APPS`).
+3. Save the file and restart the Django server:
+   ```bash
+   python manage.py runserver
+   ```
+
+#### Common Tasks
+- **Add a New App**:
+  - Create the app:
+    ```bash
+    python manage.py startapp new_app
+    ```
+  - Add it to `INSTALLED_APPS`:
+    ```python
+    INSTALLED_APPS.append('new_app')
+    ```
+
+- **Change the Database**:
+  - Update the `DATABASES` section to use PostgreSQL, MySQL, etc.
+
+By understanding `settings.py`, you can control how the backend behaves and interacts with other components.
+
+### ES Integration and Webhook Configuration (new)
+
+We added tenant-scoped configuration so you can connect a tenant to an Elasticsearch cluster and configure a webhook for alert notifications.
+
+API endpoints (authenticated):
+- GET/POST `/api/v1/es/config/es/` - get or update the tenant's ES config. POST body fields:
+  - `enabled` (bool)
+  - `hosts` (string, comma-separated)
+  - `index` (string)
+  - `username` (string, optional)
+  - `password` (string, optional)
+  - `use_ssl` (bool)
+  - `verify_certs` (bool)
+
+- GET/POST `/api/v1/es/config/webhook/` - get or update webhook config. POST body fields:
+  - `url` (string)
+  - `method` (string, default `POST`)
+  - `headers` (object)
+  - `active` (bool)
+
+Behavior:
+- The dashboard endpoint `/api/v1/es/dashboard/` will attempt to query Elasticsearch when `ESIntegrationConfig.enabled` is true for the tenant. If ES is unavailable or not configured, it falls back to the existing mock data dashboard. This allows you to keep the mock dashboard while testing a separate ES-backed dashboard.
+
+New test dashboard:
+- A new dashboard component (`Dashboard.tsx`) can be used to switch between `mock` and `es` mode for testing.
+- To test ES integration:
+  1. Configure ES via the API (`/api/v1/es/config/es/`) for your tenant.
+  2. Ensure the ES cluster is reachable from the backend and contains documents in the configured index with a `tenant_id` field.
+  3. Load the frontend dashboard and switch to `es` mode to verify data is read from Elasticsearch.
+
+Notes:
+- The ES integration uses the `elasticsearch` Python client if available. Install it in your backend virtualenv:
+  ```bash
+  pip install elasticsearch
+  ```
+- Webhook sending is not automatically triggered by these endpoints; they only store the configuration. A separate process (e.g., signal or celery task) can read `WebhookConfig` and post notifications when alerts are created.

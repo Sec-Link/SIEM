@@ -18,6 +18,8 @@ class LoginView(APIView):
     def post(self, request):
         username = request.data.get('username')
         password = request.data.get('password')
+        # optional tenant override from login form (for multi-tenant testing)
+        tenant_override = request.data.get('tenant_id')
         logger.info("Login attempt username=%s", username)
         user = authenticate(username=username, password=password)
         if not user:
@@ -32,6 +34,16 @@ class LoginView(APIView):
             logger.error("User %s has no profile; creating placeholder", user.username)
             UserProfile.objects.create(user=user, tenant_id='tenant_unassigned')
             tenant_id = 'tenant_unassigned'
+        # if a tenant override was provided, set it on the user's profile
+        if tenant_override:
+            try:
+                if tenant_override != tenant_id:
+                    user.profile.tenant_id = tenant_override
+                    user.profile.save()
+                    tenant_id = tenant_override
+                    logger.info('Set tenant_id for user %s to %s via login override', user.username, tenant_override)
+            except Exception as e:
+                logger.warning('Failed to set tenant override for user %s: %s', user.username, e)
         return Response({
             'access': str(refresh.access_token),
             'refresh': str(refresh),
