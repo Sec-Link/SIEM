@@ -305,8 +305,11 @@ class AlertService:
                 return None
 
     @staticmethod
-    def list_alerts_for_tenant(tenant_id: str, force_es: bool = False) -> Tuple[List[Dict], str]:
+    def list_alerts_for_tenant(tenant_id: str, force_es: bool = False, force_mock: bool = False) -> Tuple[List[Dict], str]:
         """Return (alerts, source) where source is 'es', 'es-http' or 'mock'."""
+        if force_mock:
+            alerts = AlertService.load_mock_alerts()
+            return [a for a in alerts if a['tenant_id'] == tenant_id], 'mock'
         # Check ES config
         try:
             cfg = ESIntegrationConfig.objects.filter(tenant_id=tenant_id).first()
@@ -350,11 +353,6 @@ class AlertService:
                         res = es.search(index=cfg.index, body=body, request_timeout=30)
                         hits = [h.get('_source', {}) for h in res.get('hits', {}).get('hits', [])]
                         logger.info('Fetched %d alerts from ES for tenant %s', len(hits), tenant_id)
-                        # 补充 source_index 字段（如缺失则用 _index）
-                        for h in hits:
-                            if 'source_index' not in h or not h['source_index']:
-                                if '_index' in h:
-                                    h['source_index'] = h['_index']
                         return hits, 'es'
                     except Exception as e:
                         logger.exception('Elasticsearch query failed: %s', e)
@@ -366,11 +364,6 @@ class AlertService:
                     body['sort'] = [{resolved_sort_field: {"order": "desc"}}]
                 hits = _http_search(cfg, body, timeout=30)
                 if hits:
-                    # 补充 source_index 字段（如缺失则用 _index）
-                    for h in hits:
-                        if 'source_index' not in h or not h['source_index']:
-                            if '_index' in h:
-                                h['source_index'] = h['_index']
                     logger.info('Fetched %d alerts from ES via HTTP fallback for tenant %s', len(hits), tenant_id)
                     return hits, 'es-http'
             except Exception as e2:
@@ -380,14 +373,13 @@ class AlertService:
         return [a for a in alerts if a['tenant_id'] == tenant_id], 'mock'
 
     @staticmethod
-    def aggregate_dashboard(tenant_id: str, force_es: bool = False) -> Dict:
-        alerts, source = AlertService.list_alerts_for_tenant(tenant_id, force_es=force_es)
+    def aggregate_dashboard(tenant_id: str, force_es: bool = False, force_mock: bool = False) -> Dict:
+        alerts, source = AlertService.list_alerts_for_tenant(tenant_id, force_es=force_es, force_mock=force_mock)
         severity_counts = {}
         timeline = {}
         source_index_counts = {}
-        message_keywords = {}
         daily_trend = {}
-        # detect timestamp field to use for timeline grouping
+        message_topN = {}
         ts_field = None
         try:
             cfg = ESIntegrationConfig.objects.filter(tenant_id=tenant_id).first()
@@ -406,7 +398,6 @@ class AlertService:
                 hour = 'unknown'
                 day = 'unknown'
             else:
-                # if it's a string, try ISO parse or slice
                 if isinstance(raw_ts, str):
                     try:
                         dt = datetime.fromisoformat(raw_ts)
@@ -428,16 +419,14 @@ class AlertService:
             # 按 source_index 统计
             idx = a.get('source_index')
             if not idx:
-                # 如果没有 source_index 字段，尝试用 _index 字段（ES 返回的原始字段）
                 idx = a.get('_index', 'unknown')
             source_index_counts[idx] = source_index_counts.get(idx, 0) + 1
-            # message 关键词统计（简单分词，按空格切分，统计出现次数，忽略过短词）
+            # message 整条统计
             msg = a.get('message', '')
-            for word in str(msg).split():
-                if len(word) > 2:
-                    message_keywords[word] = message_keywords.get(word, 0) + 1
-        # 只返回出现次数最多的前 20 个关键词
-        top_keywords = dict(sorted(message_keywords.items(), key=lambda x: x[1], reverse=True)[:20])
+            if msg:
+                message_topN[msg] = message_topN.get(msg, 0) + 1
+        # 只返回 message 出现最多的前 20 条
+        top_messages = dict(sorted(message_topN.items(), key=lambda x: x[1], reverse=True)[:20])
         return {
             'severity': severity_counts,
             'timeline': timeline,
@@ -445,5 +434,5 @@ class AlertService:
             'source': source,
             'source_index': source_index_counts,
             'daily_trend': daily_trend,
-            'top_keywords': top_keywords
+            'top_messages': top_messages
         }

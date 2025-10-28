@@ -1,17 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import { Table, Tag } from 'antd';
 import { fetchAlerts } from '../api';
 import { Alert } from '../types';
+import ModeContext from '../modeContext';
 
 const AlertList: React.FC = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const { mode } = useContext(ModeContext);
 
   const load = async () => {
-    const res = await fetchAlerts(1, 100);
+    const res = await fetchAlerts(1, 100, mode);
     setAlerts(res.alerts);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [mode]);
 
   return (
     <Table rowKey="alert_id" dataSource={alerts} pagination={false} columns={[

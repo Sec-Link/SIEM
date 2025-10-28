@@ -32,7 +32,7 @@ const LoginForm: React.FC<Props> = ({ onLogin }) => {
       background: 'linear-gradient(135deg, #f5f7fa, #c3cfe2)'
     }}>
       <Card style={{ width: 400, borderRadius: 8, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)' }}>
-        <h2 style={{ textAlign: 'center', marginBottom: 24 }}>登录到 SIEM 平台</h2>
+        <h2 style={{ textAlign: 'center', marginBottom: 24 }}>Login</h2>
         <Form 
           onFinish={(values) => {
             console.log('Form onFinish triggered with values:', values); // 调试日志
@@ -44,26 +44,26 @@ const LoginForm: React.FC<Props> = ({ onLogin }) => {
               name="tenant_id"
               rules={[]}
             >
-              <Input placeholder="Tenant (optional) - e.g. tenant_a" />
+              <Input placeholder="Tenant (optional)" />
             </Form.Item>
 
             <Form.Item 
               name="username" 
-              rules={[{ required: true, message: '请输入用户名' }]}
+              rules={[{ required: true, message: 'Please Input Username' }]}
             >
             <Input 
               prefix={<UserOutlined style={{ color: 'rgba(0,0,0,.25)' }} />} 
-              placeholder="用户名" 
+              placeholder="Username" 
               onChange={(e) => console.log('Username input changed:', e.target.value)} // 调试日志
             />
           </Form.Item>
           <Form.Item 
             name="password" 
-            rules={[{ required: true, message: '请输入密码' }]}
+            rules={[{ required: true, message: 'Please Input Password' }]}
           >
             <Input.Password 
               prefix={<LockOutlined style={{ color: 'rgba(0,0,0,.25)' }} />} 
-              placeholder="密码" 
+              placeholder="Password" 
               onChange={(e) => console.log('Password input changed:', e.target.value)} // 调试日志
             />
           </Form.Item>
