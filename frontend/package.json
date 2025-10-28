@@ -7,8 +7,10 @@
     "build": "webpack --mode production"
   },
   "dependencies": {
+    "@ant-design/charts": "^2.6.6",
+    "@ant-design/plots": "^2.6.6",
     "antd": "5.14.0",
-    "axios": "1.6.0",
+    "axios": "^1.13.0",
     "echarts": "^5.6.0",
     "echarts-for-react": "^3.0.2",
     "react": "18.2.0",
@@ -22,8 +24,8 @@
     "style-loader": "3.3.3",
     "ts-loader": "9.5.0",
     "typescript": "5.3.3",
-    "webpack": "5.88.2",
+    "webpack": "^5.102.1",
     "webpack-cli": "5.1.4",
-    "webpack-dev-server": "4.15.1"
+    "webpack-dev-server": "^5.2.2"
   }
 }

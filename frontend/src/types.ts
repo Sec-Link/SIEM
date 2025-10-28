@@ -14,7 +14,7 @@ export interface DashboardData {
   source?: string;
   source_index?: Record<string, number>;
   daily_trend?: Record<string, number>;
-  top_keywords?: Record<string, number>;
+  top_messages?: Record<string, number>;
 }
 
 export interface Ticket {

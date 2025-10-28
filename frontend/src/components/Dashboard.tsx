@@ -1,30 +1,68 @@
-import React, { useEffect, useState } from 'react';
-import { Card, Statistic, Row, Col, Space, Select, Button, Modal, Form, Input, Switch, message } from 'antd';
-import ReactECharts from 'echarts-for-react';
+import React, { useEffect, useState, useContext } from 'react';
+import { Pie, Line } from '@ant-design/charts';
+import { Column } from '@ant-design/plots';
+import { Card, Statistic, Row, Col, Space, Select, Button, Modal, Form, Input, Switch, message, Spin } from 'antd';
 import { fetchDashboard, getESConfig, setESConfig, getWebhookConfig, setWebhookConfig } from '../api';
+import ModeContext from '../modeContext';
 import { DashboardData } from '../types';
 
 const { Option } = Select;
 
 const Dashboard: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
-  const [mode, setMode] = useState<'auto'|'es'|'mock'>('auto');
+  // keep last successful data to avoid UI blanking during reloads
+  const [displayData, setDisplayData] = useState<DashboardData | null>(null);
+  const { mode, setMode } = useContext(ModeContext);
+  const modeRef = React.useRef<typeof mode>(mode);
+  const failuresRef = React.useRef<number>(0);
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  const CACHE_KEY = 'siem_dashboard_cache_v1';
+  const POLL_INTERVAL_MS = 30 * 1000; // poll every 30s for less frequent refreshes
   const [esModalVisible, setEsModalVisible] = useState(false);
   const [webhookModalVisible, setWebhookModalVisible] = useState(false);
   const [esConfig, setEsConfigState] = useState<any>(null);
   const [webhookConfig, setWebhookConfigState] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (m?: 'auto'|'es'|'mock') => {
+    const useMode = m ?? modeRef.current;
+    const isBackground = !!displayData;
+    if (isBackground) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
-      const res = await fetchDashboard(mode === 'es');
+      let res = await fetchDashboard(useMode);
       setData(res);
+      // only update the displayData when we successfully fetched something
+      if (res) {
+        setDisplayData(res);
+        // cache for faster next-loads
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: res }));
+        } catch (err) {
+          // ignore storage errors
+        }
+        failuresRef.current = 0;
+      }
     } catch (e:any) {
       console.error('Dashboard load error', e);
-      message.error('Failed to load dashboard data');
+      // light failure backoff: increment failures and skip next few polls if failing repeatedly
+      failuresRef.current = (failuresRef.current || 0) + 1;
+      const failCount = failuresRef.current;
+      // only show a visible error when we have no cached data (initial load)
+      if (!displayData && failCount <= 1) {
+        message.error('Failed to load dashboard data');
+      }
+      // if we exceed 5 failures, schedule a delayed retry
+      if (failCount > 5) {
+        setTimeout(() => load(modeRef.current), Math.min(60000, 2000 * Math.pow(2, failCount - 5)));
+      }
     } finally {
-      setLoading(false);
+      if (isBackground) setRefreshing(false);
+      else setLoading(false);
     }
   };
 
@@ -43,12 +81,75 @@ const Dashboard: React.FC = () => {
     }
   }
 
+  // small hook to animate numbers smoothly between updates
+  function useAnimatedNumber(target: number, duration = 500) {
+    const [value, setValue] = React.useState(target);
+    const rafRef = React.useRef<number | null>(null);
+    React.useEffect(() => {
+      const start = value;
+      const change = target - start;
+      if (change === 0) return;
+      const startTime = performance.now();
+      function animate(now: number) {
+        const elapsed = now - startTime;
+        if (elapsed >= duration) {
+          setValue(target);
+          return;
+        }
+        setValue(start + change * (elapsed / duration));
+        rafRef.current = requestAnimationFrame(animate);
+      }
+      rafRef.current = requestAnimationFrame(animate);
+      return () => {
+        if (rafRef.current) cancelAnimationFrame(rafRef.current!);
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [target]);
+    return Math.round(value);
+  }
+
   useEffect(() => {
-    load();
+    // on mount only: read cache and perform initial loads and polling
+    modeRef.current = mode;
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { ts: number; data: DashboardData };
+        // accept cache younger than 2 minutes
+        if (Date.now() - parsed.ts < 2 * 60 * 1000) {
+          setDisplayData(parsed.data);
+        }
+      }
+    } catch (err) {
+      // ignore cache errors
+    }
+
+    // initial load and config load
+    load(modeRef.current);
     loadConfigs();
-    const id = setInterval(load, 10000);
-    return () => clearInterval(id);
-  }, [mode]);
+
+    // Polling: only poll when the tab is visible to avoid extra work
+    const intervalFn = () => {
+      if (document.visibilityState === 'visible') {
+        load(modeRef.current);
+      }
+    };
+    const id = setInterval(intervalFn, 10000);
+
+    // also reload once when tab becomes visible
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        load(modeRef.current);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openEsModal = () => setEsModalVisible(true);
   const openWebhookModal = () => setWebhookModalVisible(true);
@@ -89,79 +190,136 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <>
-      <Space style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
-        <Select value={mode} onChange={(v) => setMode(v as any)} style={{ width: 160 }}>
-          <Option value="auto">Auto (use config)</Option>
-          <Option value="es">Force ES</Option>
-          <Option value="mock">Force Mock</Option>
-        </Select>
-        <div>
-          <Button onClick={openEsModal} style={{ marginRight: 8 }}>ES Settings</Button>
-          <Button onClick={openWebhookModal}>Webhook Settings</Button>
+  <>
+      <Space style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <Select value={mode} onChange={(v) => { setMode(v as any); modeRef.current = v as any; load(v as any); }} style={{ width: 160 }}>
+            <Option value="auto">Auto (use config)</Option>
+            <Option value="es">Force ES</Option>
+            <Option value="mock">Force Mock</Option>
+          </Select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div>
+            <Button onClick={openEsModal} style={{ marginRight: 8 }}>ES Settings</Button>
+            <Button onClick={openWebhookModal}>Webhook Settings</Button>
+          </div>
+          {refreshing && <Spin size="small" style={{ marginLeft: 12 }} />}
         </div>
       </Space>
 
       <Row gutter={16} style={{ marginTop: 16 }}>
+        {/** use displayData (last successful) to avoid blanking while loading */}
         <Col span={6}>
-          <Card><Statistic title="Total Alerts" value={data?.total || 0} loading={loading}/></Card>
+          <Card>
+            <Statistic
+              title="Total Alerts"
+              value={useAnimatedNumber(displayData?.total ?? 0, 600)}
+              loading={!displayData && loading}
+              valueStyle={{ transition: 'all 0.5s cubic-bezier(.08,.82,.17,1)' }}
+            />
+          </Card>
         </Col>
         <Col span={6}>
-          <Card><Statistic title="Critical" value={data?.severity?.Critical || 0} loading={loading}/></Card>
+          <Card>
+            <Statistic
+              title="Critical"
+              value={useAnimatedNumber(displayData?.severity?.Critical ?? 0, 600)}
+              loading={!displayData && loading}
+              valueStyle={{ transition: 'all 0.5s cubic-bezier(.08,.82,.17,1)' }}
+            />
+          </Card>
         </Col>
         <Col span={6}>
-          <Card><Statistic title="Warning" value={data?.severity?.Warning || 0} loading={loading}/></Card>
+          <Card>
+            <Statistic
+              title="Warning"
+              value={useAnimatedNumber(displayData?.severity?.Warning ?? 0, 600)}
+              loading={!displayData && loading}
+              valueStyle={{ transition: 'all 0.5s cubic-bezier(.08,.82,.17,1)' }}
+            />
+          </Card>
         </Col>
         <Col span={6}>
-          <Card><Statistic title="Info" value={data?.severity?.Info || 0} loading={loading}/></Card>
+          <Card>
+            <Statistic
+              title="Info"
+              value={useAnimatedNumber(displayData?.severity?.Info ?? 0, 600)}
+              loading={!displayData && loading}
+              valueStyle={{ transition: 'all 0.5s cubic-bezier(.08,.82,.17,1)' }}
+            />
+          </Card>
         </Col>
       </Row>
 
-      {/* 新增 source_index 饼图 */}
-      {data?.source_index && Object.keys(data.source_index).length > 0 && (
+      {/* source_index 饼图（AntD Plots Pie） */}
+      {displayData?.source_index && Object.keys(displayData.source_index).length > 0 && (
         <Card title="Source Index Distribution" style={{ marginTop: 24 }}>
-          <ReactECharts style={{ height: 320 }} option={{
-            tooltip: { trigger: 'item' },
-            legend: { top: 'bottom' },
-            series: [{
-              type: 'pie',
-              radius: '60%',
-              data: Object.entries(data.source_index).map(([name, value]) => ({ name, value })),
-            }]
-          }} />
+          <Pie
+            data={Object.entries(displayData.source_index).map(([type, value]) => ({ type: type ?? String(type), value }))}
+            angleField="value"
+            colorField="type"
+            radius={0.8}
+            height={320}
+            label={{
+              text: (d: any) => `${d.type}\n ${d.value}`,
+              position: 'spider',
+            }}
+            legend={{
+              color: {
+                title: false,
+                position: 'right',
+                rowPadding: 5,
+              },
+            }}
+          />
         </Card>
       )}
 
-      {/* 新增 daily_trend 折线图 */}
-      {data?.daily_trend && Object.keys(data.daily_trend).length > 0 && (
+      {/* daily_trend 折线图（AntD Line） */}
+      {displayData?.daily_trend && Object.keys(displayData.daily_trend).length > 0 && (
         <Card title="Daily Alert Trend" style={{ marginTop: 24 }}>
-          <ReactECharts style={{ height: 320 }} option={{
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'category', data: Object.keys(data.daily_trend) },
-            yAxis: { type: 'value' },
-            series: [{
-              data: Object.values(data.daily_trend),
-              type: 'line',
-              smooth: true,
-              areaStyle: {},
-            }]
-          }} />
+          <Line
+            data={Object.entries(displayData.daily_trend).map(([date, count]) => ({ date, count }))}
+            xField="date"
+            yField="count"
+            height={320}
+            point={{ size: 5, shape: 'diamond' }}
+            smooth
+            area={{}}
+          />
         </Card>
       )}
 
-      {/* 新增 top_keywords 词云/柱状图 */}
-      {data?.top_keywords && Object.keys(data.top_keywords).length > 0 && (
-        <Card title="Top Message Keywords" style={{ marginTop: 24 }}>
-          <ReactECharts style={{ height: 320 }} option={{
-            tooltip: {},
-            xAxis: { type: 'category', data: Object.keys(data.top_keywords) },
-            yAxis: { type: 'value' },
-            series: [{
-              data: Object.values(data.top_keywords),
-              type: 'bar',
-              itemStyle: { color: '#5470c6' },
-            }]
-          }} />
+      {/* message top10 柱状图（AntD Plots Column，参考DemoColumn样式） */}
+      {displayData?.top_messages && Object.keys(displayData.top_messages).length > 0 && (
+        <Card title="Top 10 Messages" style={{ marginTop: 24 }}>
+          <Column
+            data={Object.entries(displayData.top_messages).slice(0, 10).map(([type, value]) => ({ type, value }))}
+            xField="type"
+            yField="value"
+            colorField="type"
+            height={320}
+            legend={{
+              position: 'right',
+              itemName: {
+                style: {
+                  fontSize: 14,
+                  wordBreak: 'break-all',
+                  maxWidth: 220,
+                },
+              },
+            }}
+            label={false}
+            yAxis={{
+              title: {
+                text: 'Count',
+                style: { fontSize: 14 },
+              },
+            }}
+            tooltip={{ showMarkers: false }}
+            axis={{ x: false }}
+          />
         </Card>
       )}
 

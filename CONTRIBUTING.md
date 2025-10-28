@@ -243,6 +243,127 @@ By following these steps, you can successfully bind the dashboard app with Elast
 
 If you have any questions, contact the project owner.
 
+---
+
+## Local development & useful notes
+
+These are pragmatic, up-to-date instructions to run the project locally and speed up debugging.
+
+### Backend (Django)
+
+1. Create and activate a virtual environment (recommended):
+
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r backend/requirements.txt
+   ```
+
+2. Run migrations and start the dev server:
+
+   ```bash
+   cd backend
+   python manage.py migrate
+   python manage.py runserver 8000
+   ```
+
+3. Useful management commands:
+
+   - Create superuser: `python manage.py createsuperuser`
+   - Run tests: `python manage.py test`
+
+### Frontend (React + TypeScript)
+
+1. Install dependencies and start the dev server:
+
+   ```bash
+   cd frontend
+   npm install
+   npm start
+   ```
+
+   If `npm start` fails because port 3000 is in use, either stop the process using the port or start on a different port:
+
+   - Find the PID using the port (macOS / Linux):
+     ```bash
+     lsof -i :3000
+     kill <PID>
+     ```
+
+   - Or start on a different port without killing processes:
+     ```bash
+     PORT=3001 npm start
+     ```
+
+2. Build for production:
+
+   ```bash
+   npm run build
+   ```
+
+3. Tests and linters:
+
+   - Run unit tests: `npm test` (Jest)
+   - Run TypeScript checks: `npm run typecheck` (if configured)
+   - Run lint: `npm run lint`
+
+### API client and token persistence
+
+The frontend persists authentication tokens and some cached UI data in localStorage to improve UX and avoid being logged out on refresh. Current keys used by the app:
+
+- `siem_access_token` — the JWT/access token stored after login
+- `siem_tenant_id` — tenant id associated with the login
+- `siem_dashboard_cache_v1` — cached dashboard payload used to avoid blanking while the UI reloads
+
+When adding or changing authentication logic, update `frontend/src/api.ts` and `frontend/src/components/LoginForm.tsx` accordingly.
+
+### Mock vs ES mode (how to test both)
+
+The dashboard and alert list support three modes: `auto`, `es`, and `mock`.
+
+- `auto` (default): the backend will use configured ES for the tenant when available, otherwise it falls back to mock data.
+- `es` / `force_es`: force the backend to query Elasticsearch (useful when you want to verify ES-backed results).
+- `mock`: force the backend to return the bundled mock data (useful for UI development when ES is not available).
+
+From the frontend, the UI appends query params to backend calls to force a mode. Example endpoints:
+
+- Dashboard (mock): `GET /api/v1/es/dashboard/?mock=1`
+- Dashboard (force ES): `GET /api/v1/es/dashboard/?force_es=1`
+- Alerts list: `GET /api/v1/alerts/list/?mock=1` (Alert list view now respects the `mock` and `force_es` query params)
+
+When configuring ES for a tenant, ensure documents in the configured index include a `tenant_id` field — the backend filters by tenant before returning results.
+
+### Troubleshooting common problems
+
+- Port 3000 already in use when running the frontend.
+  - See the commands above to find and kill the PID, or set `PORT` to another value when starting.
+
+- Elasticsearch returns zero or incomplete results:
+  - Verify the configured ES host/credentials in the tenant's ESIntegrationConfig (`/api/v1/es/config/es/`).
+  - Confirm the index exists and documents have a `tenant_id` field.
+  - Check backend logs for ES client errors — the backend will fall back to mock data when ES is unreachable.
+
+- UI blanking after refresh:
+  - The app caches the last dashboard payload in `siem_dashboard_cache_v1`. If you still see blanking, make sure the browser can read localStorage and that `frontend/src/components/Dashboard.tsx` is present and up to date.
+
+### PRs, branches, and code review
+
+- Base your feature branches on `main` (or `develop` if your team uses a long-lived development branch):
+
+  ```bash
+  git checkout -b feature/your-feature-name main
+  ```
+
+- Write clear commit messages and keep PRs focused. Include screenshots for UI changes and sample requests/responses for API changes.
+
+- Small PR checklist:
+  - Passes backend unit tests (`python manage.py test`)
+  - Passes frontend tests (`npm test`)
+  - Typescript type checks / no type regressions
+  - Linting completed and no new lint errors
+
+---
+
 ### Django Settings Overview for Beginners
 
 If you are new to Django and Python, here is a simplified explanation of the `settings.py` file and how it works in this project.

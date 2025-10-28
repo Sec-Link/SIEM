@@ -15,7 +15,10 @@ class AlertListView(APIView):
 
     def get(self, request):
         tenant_id = request.user.profile.tenant_id
-        alerts, source = AlertService.list_alerts_for_tenant(tenant_id)
+        # honor query params to force mock or force ES when requested by the frontend
+        force_mock = request.GET.get('mock') in ['1', 'true', 'True']
+        force_es = request.GET.get('force_es') in ['1', 'true', 'True']
+        alerts, source = AlertService.list_alerts_for_tenant(tenant_id, force_es=force_es, force_mock=force_mock)
         page = int(request.GET.get('page', 1))
         page_size = int(request.GET.get('page_size', 20))
         start = (page - 1) * page_size
@@ -43,9 +46,9 @@ class AlertDashboardView(APIView):
 
     def get(self, request):
         tenant_id = request.user.profile.tenant_id
-        # support forcing ES via query param
+        force_mock = request.GET.get('mock') in ['1', 'true', 'True']
         force_es = request.GET.get('force_es') in ['1', 'true', 'True']
-        data = AlertService.aggregate_dashboard(tenant_id, force_es=force_es)
+        data = AlertService.aggregate_dashboard(tenant_id, force_es=force_es, force_mock=force_mock)
         return Response(data)
 
 
