@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Form, Input, Button, message, Card } from 'antd';
 import { login } from '../api';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
+import { UserOutlined, LockOutlined, TagOutlined } from '@ant-design/icons';
 
 interface Props { onLogin: () => void }
 
@@ -9,7 +9,6 @@ const LoginForm: React.FC<Props> = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
 
   const submit = async (values: any) => {
-    console.log('Submitting form with values:', values); // 调试日志
     setLoading(true);
     try {
   const res = await login(values.username, values.password, values.tenant_id);
@@ -34,17 +33,14 @@ const LoginForm: React.FC<Props> = ({ onLogin }) => {
       <Card style={{ width: 400, borderRadius: 8, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)' }}>
         <h2 style={{ textAlign: 'center', marginBottom: 24 }}>Login</h2>
         <Form 
-          onFinish={(values) => {
-            console.log('Form onFinish triggered with values:', values); // 调试日志
-            submit(values);
-          }} 
+          onFinish={(values) => submit(values)} 
           style={{ maxWidth: 320, margin: '0 auto' }}
         >
             <Form.Item 
               name="tenant_id"
               rules={[]}
             >
-              <Input placeholder="Tenant (optional)" />
+              <Input prefix={<TagOutlined style={{ color: 'rgba(0,0,0,.25)' }} />} placeholder="Tenant (optional)" />
             </Form.Item>
 
             <Form.Item 
@@ -54,7 +50,7 @@ const LoginForm: React.FC<Props> = ({ onLogin }) => {
             <Input 
               prefix={<UserOutlined style={{ color: 'rgba(0,0,0,.25)' }} />} 
               placeholder="Username" 
-              onChange={(e) => console.log('Username input changed:', e.target.value)} // 调试日志
+              onChange={() => {}} 
             />
           </Form.Item>
           <Form.Item 
@@ -64,7 +60,7 @@ const LoginForm: React.FC<Props> = ({ onLogin }) => {
             <Input.Password 
               prefix={<LockOutlined style={{ color: 'rgba(0,0,0,.25)' }} />} 
               placeholder="Password" 
-              onChange={(e) => console.log('Password input changed:', e.target.value)} // 调试日志
+              onChange={() => {}} 
             />
           </Form.Item>
           <Button 
@@ -73,7 +69,7 @@ const LoginForm: React.FC<Props> = ({ onLogin }) => {
             loading={loading} 
             block
             style={{ background: 'linear-gradient(90deg, #4facfe, #00f2fe)', border: 'none' }}
-            onClick={() => console.log('Login button clicked')} // 调试日志
+            onClick={() => {}} 
           >
             登录
           </Button>
