@@ -321,7 +321,32 @@ def integrations_db_tables(request):
     Accepts: { db_type: 'postgres'|'mysql', conn_str?, host?, user?, password?, database?, port?, django_db? }
     """
     try:
-        data = request.data if hasattr(request, 'data') else {}
+        raw = request.data if hasattr(request, 'data') else {}
+        # make a mutable copy we can augment from an Integration if caller provided one
+        try:
+            data = dict(raw)
+        except Exception:
+            data = raw
+        # allow passing an existing integration id to reuse its saved DB config
+        dest_iid = data.get('integration') or data.get('integration_id') or data.get('dest_integration') or data.get('dest_integration_id')
+        if dest_iid:
+            try:
+                dest_it = Integration.objects.get(id=dest_iid)
+                dest_cfg = dest_it.config or {}
+                # prefer explicit payload values, but fill missing ones from integration config
+                if not data.get('conn_str') and dest_cfg.get('conn_str'):
+                    data['conn_str'] = dest_cfg.get('conn_str')
+                for k in ('host', 'user', 'username', 'password', 'database', 'dbname', 'port', 'django_db'):
+                    if not data.get(k) and dest_cfg.get(k) is not None:
+                        data[k] = dest_cfg.get(k)
+                # normalize db_type from integration type if missing
+                if not data.get('db_type'):
+                    if dest_it.type == 'postgresql':
+                        data['db_type'] = 'postgres'
+                    elif dest_it.type == 'mysql':
+                        data['db_type'] = 'mysql'
+            except Integration.DoesNotExist:
+                return Response({'error': 'integration not found'}, status=status.HTTP_404_NOT_FOUND)
         db_type = data.get('db_type')
         # django_db alias takes precedence for listing via Django connections
         django_db = data.get('django_db')
@@ -421,7 +446,29 @@ def integrations_create_table(request):
     Creates a safe default table: id serial/auto, es_id text unique, data jsonb/json, created_at timestamp
     """
     try:
-        data = request.data if hasattr(request, 'data') else {}
+        raw = request.data if hasattr(request, 'data') else {}
+        try:
+            data = dict(raw)
+        except Exception:
+            data = raw
+        # allow referring to an existing integration to read DB config
+        dest_iid = data.get('integration') or data.get('integration_id') or data.get('dest_integration') or data.get('dest_integration_id')
+        if dest_iid:
+            try:
+                dest_it = Integration.objects.get(id=dest_iid)
+                dest_cfg = dest_it.config or {}
+                if not data.get('conn_str') and dest_cfg.get('conn_str'):
+                    data['conn_str'] = dest_cfg.get('conn_str')
+                for k in ('host', 'user', 'username', 'password', 'database', 'dbname', 'port', 'django_db', 'table'):
+                    if not data.get(k) and dest_cfg.get(k) is not None:
+                        data[k] = dest_cfg.get(k)
+                if not data.get('db_type'):
+                    if dest_it.type == 'postgresql':
+                        data['db_type'] = 'postgres'
+                    elif dest_it.type == 'mysql':
+                        data['db_type'] = 'mysql'
+            except Integration.DoesNotExist:
+                return Response({'error': 'integration not found'}, status=status.HTTP_404_NOT_FOUND)
         table = data.get('table')
         if not table:
             return Response({'error': 'table name required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -509,7 +556,11 @@ def integrations_create_table_from_es(request):
       - optional connection fields as in integrations_create_table (db_type/conn_str/host/user/password/database/port/django_db)
     """
     try:
-        data = request.data if hasattr(request, 'data') else {}
+        raw = request.data if hasattr(request, 'data') else {}
+        try:
+            data = dict(raw)
+        except Exception:
+            data = raw
         es_iid = data.get('es_integration') or data.get('es_integration_id')
         index = data.get('index')
         table = data.get('table')
@@ -715,7 +766,27 @@ def integrations_create_table_from_es(request):
             # ensure required fields are present
             return integrations_create_table(request)
 
-    # build SQL depending on target DB. `cols` is available either from provided_columns or inferred mapping
+        # Before building SQL, allow caller to reference an existing destination integration to reuse its DB config
+        dest_iid = data.get('dest_integration') or data.get('dest_integration_id') or data.get('integration') or data.get('integration_id')
+        if dest_iid:
+            try:
+                dest_it = Integration.objects.get(id=dest_iid)
+                dest_cfg = dest_it.config or {}
+                # fill missing connection fields from dest integration config
+                if not data.get('conn_str') and dest_cfg.get('conn_str'):
+                    data['conn_str'] = dest_cfg.get('conn_str')
+                for k in ('host', 'user', 'username', 'password', 'database', 'dbname', 'port', 'django_db', 'table'):
+                    if not data.get(k) and dest_cfg.get(k) is not None:
+                        data[k] = dest_cfg.get(k)
+                if not data.get('db_type'):
+                    if dest_it.type == 'postgresql':
+                        data['db_type'] = 'postgres'
+                    elif dest_it.type == 'mysql':
+                        data['db_type'] = 'mysql'
+            except Integration.DoesNotExist:
+                return Response({'error': 'dest integration not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # build SQL depending on target DB. `cols` is available either from provided_columns or inferred mapping
         db_type = data.get('db_type')
         if data.get('conn_str'):
             # if conn_str provided, we can detect postgres by prefix
