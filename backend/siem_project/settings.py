@@ -20,6 +20,8 @@ INSTALLED_APPS = [
     'users',
     'es_integration',
     'ticketing',
+    'integrations',
+    'dashboards',
 ]
 
 MIDDLEWARE = [
@@ -89,6 +91,16 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,
 }
+
+# Trusted origins for CSRF checks. Add frontend dev servers here so POST requests
+# from the browser with an Origin header are accepted during local development.
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    # Vite default port (if you use Vite)
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]
 
 LOGGING = {
     'version': 1,
