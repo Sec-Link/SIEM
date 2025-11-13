@@ -91,3 +91,129 @@ export async function setWebhookConfig(payload: any) {
   const res = await client.post('/alerts/config/webhook/', payload);
   return res.data;
 }
+
+export async function getDatasourceFields(table: string){
+  const r = await client.get(`/datasource/fields?table=${encodeURIComponent(table)}`)
+  return r.data
+}
+
+export async function listDatasources(){
+  const r = await client.get('/datasources/')
+  return r.data
+}
+
+// Dataset APIs removed — use DataSource + SQL preview instead
+
+export async function queryPreview(payload:any){
+  const r = await client.post('/query/preview', payload)
+  return r.data
+}
+
+export async function createDatasource(payload:any){
+  const r = await client.post('/datasources/', payload)
+  return r.data
+}
+
+export async function updateDatasource(id:string, payload:any){
+  const r = await client.put(`/datasources/${id}/`, payload)
+  return r.data
+}
+
+export async function deleteDatasource(id:string){
+  const r = await client.delete(`/datasources/${id}/`)
+  return r.data
+}
+
+export async function testDatasource(payload:any){
+  const r = await client.post('/datasource/test', payload)
+  return r.data
+}
+
+export async function testEsIntegration(payload:any){
+  const r = await client.post('/integrations/test_es', payload)
+  return r.data
+}
+
+export async function testLogstashIntegration(payload:any){
+  const r = await client.post('/integrations/test_logstash', payload)
+  return r.data
+}
+
+export async function testAirflowIntegration(payload:any){
+  const r = await client.post('/integrations/test_airflow', payload)
+  return r.data
+}
+
+export async function previewEsIntegration(payload:any){
+  const r = await client.post('/integrations/preview_es', payload)
+  return r.data
+}
+
+export async function integrationsDbTables(payload:any){
+  const r = await client.post('/integrations/db_tables', payload)
+  return r.data
+}
+
+export async function integrationsCreateTable(payload:any){
+  const r = await client.post('/integrations/create_table', payload)
+  return r.data
+}
+
+export async function integrationsCreateTableFromEs(payload:any){
+  const r = await client.post('/integrations/create_table_from_es', payload)
+  return r.data
+}
+
+export async function integrationsPreviewEsMapping(payload:any){
+  const r = await client.post('/integrations/preview_es_mapping', payload)
+  return r.data
+}
+
+// Integrations CRUD
+export async function listIntegrations(){
+  const r = await client.get('/integrations/')
+  return r.data
+}
+
+export async function createIntegration(payload:any){
+  const r = await client.post('/integrations/', payload)
+  return r.data
+}
+
+export async function updateIntegration(id:string, payload:any){
+  const r = await client.put(`/integrations/${id}/`, payload)
+  return r.data
+}
+
+export async function deleteIntegration(id:string){
+  const r = await client.delete(`/integrations/${id}/`)
+  return r.data
+}
+
+export default client
+
+// Dashboards API
+export async function listDashboards(){
+  const r = await client.get('/dashboards/')
+  return r.data
+}
+
+export async function createDashboard(payload:any){
+  const r = await client.post('/dashboards/', payload)
+  return r.data
+}
+
+export async function getDashboard(id:string){
+  const r = await client.get(`/dashboards/${id}/`)
+  return r.data
+}
+
+export async function updateDashboard(id:string, payload:any){
+  const r = await client.put(`/dashboards/${id}/`, payload)
+  return r.data
+}
+
+export async function deleteDashboard(id:string){
+  const r = await client.delete(`/dashboards/${id}/`)
+  return r.data
+}

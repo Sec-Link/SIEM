@@ -5,6 +5,7 @@ import LoginForm from './components/LoginForm';
 import Dashboard from './components/Dashboard';
 import AlertList from './components/AlertList';
 import TicketList from './components/TicketList';
+import Integrations from './components/Integrations';
 import ModeContext, { ModeType } from './modeContext';
 
 const { Header, Content } = Layout;
@@ -47,7 +48,8 @@ const App: React.FC = () => {
         <Tabs items={[
           { key: 'dashboard', label: '仪表盘', children: <Dashboard /> },
           { key: 'alerts', label: '告警列表', children: <AlertList /> },
-          { key: 'tickets', label: '工单', children: <TicketList /> }
+          { key: 'tickets', label: '工单', children: <TicketList /> },
+          { key: 'integrations', label: '集成', children: <Integrations /> }
         ]} />
       </Content>
     </Layout>
