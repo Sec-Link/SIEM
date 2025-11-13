@@ -10,7 +10,9 @@ import ModeContext, { ModeType } from './modeContext';
 const { Header, Content } = Layout;
 
 const App: React.FC = () => {
-  const [loggedIn, setLoggedIn] = useState(false);
+  // initialize from localStorage synchronously to avoid flashing the login UI on refresh
+  const initialToken = (() => { try { return localStorage.getItem('siem_access_token'); } catch (e) { return null; } })();
+  const [loggedIn, setLoggedIn] = useState(!!initialToken);
   const [mode, setMode] = useState<ModeType>('auto');
 
   const handleLogout = () => {
@@ -24,6 +26,7 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    // effect kept for future changes to auth, but initial state is already set synchronously
     try {
       const t = localStorage.getItem('siem_access_token');
       if (t) setLoggedIn(true);
