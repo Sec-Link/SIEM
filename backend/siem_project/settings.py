@@ -22,6 +22,8 @@ INSTALLED_APPS = [
     'ticketing',
     'integrations',
     'dashboards',
+    'datasource',
+    'orchestrator',
 ]
 
 MIDDLEWARE = [
