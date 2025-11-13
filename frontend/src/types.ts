@@ -26,3 +26,13 @@ export interface Ticket {
   related_alert_id?: string;
   created_at: string;
 }
+
+export interface Integration {  
+  integration_id: string;
+  tenant_id: string;
+  status: string;
+  title: string;
+  description: string;
+  related_alert_id?: string;
+  created_at: string;
+}
