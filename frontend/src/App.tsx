@@ -20,7 +20,7 @@ const App: React.FC = () => {
       localStorage.removeItem('siem_tenant_id');
     } catch (err) {}
     clearAccessToken();
-    console.log('User logged out'); // 调试日志
+    // user logged out
   };
 
   useEffect(() => {
