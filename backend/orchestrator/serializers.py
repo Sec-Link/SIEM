@@ -1,0 +1,24 @@
+from rest_framework import serializers
+from .models import Task, TaskRun
+
+# -----------------------------
+# 中文注释：
+# 该模块定义了 Task 与 TaskRun 的序列化器（用于 REST API 的输入/输出转换）
+# - `TaskSerializer` 包含一个嵌套的 `runs` 字段，用于只读地返回相关的 TaskRun 列表
+# - `TaskRunSerializer` 将 TaskRun 的所有字段序列化，以便返回执行日志、状态和时间戳等信息
+#
+# 本文件仅添加文档注释，不更改序列化逻辑。
+# -----------------------------
+
+
+class TaskRunSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskRun
+        fields = '__all__'
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    runs = TaskRunSerializer(many=True, read_only=True)
+    class Meta:
+        model = Task
+        fields = '__all__'

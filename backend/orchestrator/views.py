@@ -1,0 +1,91 @@
+import os
+import json
+from django.conf import settings
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from .models import Task, TaskRun
+from .serializers import TaskSerializer, TaskRunSerializer
+from integrations.views import sync_es_to_db
+from integrations.models import Integration
+from django.utils import timezone
+
+
+GENERATED_DIR = os.path.join(settings.BASE_DIR, 'generated_tasks')
+os.makedirs(GENERATED_DIR, exist_ok=True)
+
+# -----------------------------
+# 中文注释（文件级别说明）
+#
+# 该模块负责调度/任务（Task）相关的 REST 接口：
+# - `TaskViewSet` 提供 CRUD，创建/更新 Task 时会在磁盘上生成任务配置文件和运行脚本（存放在 generated_tasks 目录）
+# - `TaskViewSet.run` 提供触发任务执行的 API（调用 orchestrator.utils.execute_task），并返回 TaskRun 记录
+# - `TaskRunViewSet` 提供只读的任务运行记录查询
+#
+# 生成的 runner 脚本和 config 主要用于在外部运行器（例如 CI、cron 或流水线）执行任务。注意：为保持原样行为，本文件仅添加注释，未改变现有逻辑或文件写入策略。
+# -----------------------------
+
+
+class TaskViewSet(viewsets.ModelViewSet):
+    queryset = Task.objects.all().order_by('-created_at')
+    serializer_class = TaskSerializer
+
+    def perform_create(self, serializer):
+        task = serializer.save()
+        # generate task config and DAG immediately
+        self._generate_task_files(task)
+
+    def perform_update(self, serializer):
+        task = serializer.save()
+        self._generate_task_files(task)
+
+    def _generate_task_files(self, task: Task):
+        # write config JSON
+        cfg_path = os.path.join(GENERATED_DIR, f"task_{task.id}.json")
+        with open(cfg_path, 'w', encoding='utf-8') as f:
+            json.dump({'id': str(task.id), 'name': task.name, 'type': task.task_type, 'config': task.config}, f, indent=2)
+
+        # generate a generic task runner shell script (executes appropriate tool based on task type)
+        runner_sh = os.path.join(GENERATED_DIR, f"task_runner_{task.id}.sh")
+        if task.task_type == 'logstash':
+            # assume Logstash is available on PATH; run logstash with generated config
+            conf_path = os.path.join(GENERATED_DIR, f"logstash_{task.id}.conf")
+            with open(conf_path, 'w', encoding='utf-8') as fconf:
+                # naive rendering: for tasks with config.inputs/filters/outputs
+                cfg = task.config or {}
+                ins = cfg.get('inputs', [])
+                fil = cfg.get('filters', [])
+                outs = cfg.get('outputs', [])
+                for i in ins:
+                    fconf.write(f"input {{ {i.get('type')} {{ {i.get('path','')} }} }}\n")
+                for ff in fil:
+                    fconf.write(f"filter {{ {ff.get('type')} {{ {ff.get('pattern','')} }} }}\n")
+                for o in outs:
+                    fconf.write(f"output {{ {o.get('type')} {{ {o.get('config','')} }} }}\n")
+            runner_content = f"#!/bin/sh\necho Running logstash for task {task.id}\nlogstash -f {conf_path}\n"
+        else:
+            runner_content = f"#!/bin/sh\necho Running task {task.id} (type: {task.task_type})\necho Config file: {cfg_path}\ncat {cfg_path}\n"
+
+        with open(runner_sh, 'w', encoding='utf-8') as fr:
+            fr.write(runner_content)
+        # make executable if possible
+        try:
+            os.chmod(runner_sh, 0o755)
+        except Exception:
+            pass
+
+    @action(detail=True, methods=['post'])
+    def run(self, request, pk=None):
+        task = self.get_object()
+        # delegate execution to helper so scheduler and API share behavior
+        try:
+            from .utils import execute_task
+            run = execute_task(task)
+            return Response(TaskRunSerializer(run).data)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TaskRunViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = TaskRun.objects.all().order_by('-started_at')
+    serializer_class = TaskRunSerializer

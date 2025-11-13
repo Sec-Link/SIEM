@@ -9,6 +9,8 @@ import Integrations from './pages/Integrations';
 import ModeContext, { ModeType } from './modeContext';
 import DashboardList from './pages/DashboardList';
 import DashboardEditor from './pages/DashboardEditor';
+import DataSources from './pages/DataSources';
+import Orchestrator from './pages/Orchestrator';
 const { Header, Content } = Layout;
 
 const App: React.FC = () => {
@@ -62,6 +64,8 @@ const App: React.FC = () => {
               <DashboardList onEdit={(id?:string) => setEditingDashboardId(id)} />
             )
           ) },
+          { key: 'datasources', label: '数据源', children: <DataSources /> },
+          { key: 'orchestrator', label: '编排器', children: <Orchestrator /> },
         ]} />
       </Content>
     </Layout>
