@@ -1,6 +1,6 @@
 {
-  "id": "4e10df05-18e2-4ea3-a68d-2a54daf0d4b7",
-  "name": "1",
+  "id": "2cdf1e07-2afe-423d-8019-891f9b67dbe1",
+  "name": "2",
   "type": "es_to_db",
   "config": {
     "sync": "es_to_db",
