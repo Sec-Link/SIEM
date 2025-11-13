@@ -71,6 +71,8 @@ const Integrations: React.FC = () =>{
         payload.port = v.port || ''
         payload.django_db = v.django_db || undefined
       }
+      // if editing an existing integration, include its id so backend can use saved config
+      if(editingIndex !== null){ payload.integration = items[editingIndex].id }
       const res = await integrationsDbTables(payload)
       if(res && res.tables) setAvailableTables(res.tables)
       else setAvailableTables([])
@@ -183,6 +185,7 @@ const Integrations: React.FC = () =>{
         payload.port = v.port || ''
         payload.django_db = v.django_db || undefined
       }
+      if(editingIndex !== null){ payload.integration = items[editingIndex].id }
       const res = await integrationsCreateTable(payload)
       if(res && res.ok){
         message.success('Table created: ' + res.table)
@@ -220,6 +223,8 @@ const Integrations: React.FC = () =>{
       if(editedColumns && editedColumns.length > 0){
         payload.columns = editedColumns.map(c=>({ orig_name: c.orig_name, colname: c.colname, sql_type: c.sql_type }))
       }
+      // if editing an existing (destination) integration, tell backend which integration to reuse
+      if(editingIndex !== null){ payload.integration = items[editingIndex].id }
       const res = await integrationsCreateTableFromEs(payload)
       if(res && res.ok){
         message.success('Table created from ES mapping: ' + res.table)

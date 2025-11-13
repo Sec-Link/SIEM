@@ -41,6 +41,7 @@ This project is a Security Information and Event Management (SIEM) platform buil
 6. Start the development server:
    ```bash
    python manage.py runserver
+    python manage.py  scheduler --interval 30
    ```
 
 ### Frontend
