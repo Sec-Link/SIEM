@@ -5,9 +5,10 @@ import LoginForm from './components/LoginForm';
 import Dashboard from './components/Dashboard';
 import AlertList from './components/AlertList';
 import TicketList from './components/TicketList';
-import Integrations from './components/Integrations';
+import Integrations from './pages/Integrations';
 import ModeContext, { ModeType } from './modeContext';
-
+import DashboardList from './pages/DashboardList';
+import DashboardEditor from './pages/DashboardEditor';
 const { Header, Content } = Layout;
 
 const App: React.FC = () => {
@@ -15,6 +16,7 @@ const App: React.FC = () => {
   const initialToken = (() => { try { return localStorage.getItem('siem_access_token'); } catch (e) { return null; } })();
   const [loggedIn, setLoggedIn] = useState(!!initialToken);
   const [mode, setMode] = useState<ModeType>('auto');
+  const [editingDashboardId, setEditingDashboardId] = useState<string | undefined>(undefined);
 
   const handleLogout = () => {
     setLoggedIn(false);
@@ -52,7 +54,14 @@ const App: React.FC = () => {
           { key: 'dashboard', label: '仪表盘', children: <Dashboard /> },
           { key: 'alerts', label: '告警列表', children: <AlertList /> },
           { key: 'tickets', label: '工单', children: <TicketList /> },
-          { key: 'integrations', label: '集成', children: <Integrations /> }
+          { key: 'integrations', label: '集成', children: <Integrations /> },
+          { key: 'dashboards', label: '仪表盘列表', children: (
+            editingDashboardId ? (
+              <DashboardEditor dashboardId={editingDashboardId} onBack={() => setEditingDashboardId(undefined)} />
+            ) : (
+              <DashboardList onEdit={(id?:string) => setEditingDashboardId(id)} />
+            )
+          ) },
         ]} />
       </Content>
     </Layout>
