@@ -1,3 +1,4 @@
+import os
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from users.models import UserProfile
@@ -14,7 +15,8 @@ class Command(BaseCommand):
         for username, tenant in demo:
             user, created = User.objects.get_or_create(username=username)
             if created:
-                user.set_password('Password123!')
+                pwd = os.environ.get('SEED_USER_PASSWORD') or User.objects.make_random_password()
+                user.set_password(pwd)
                 user.save()
             UserProfile.objects.get_or_create(user=user, tenant_id=tenant)
         self.stdout.write(self.style.SUCCESS('Seeded demo users'))

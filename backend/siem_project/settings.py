@@ -4,7 +4,12 @@ from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'dev-secret-key-change-later'
+import os
+import secrets
+
+# SECRET_KEY should come from environment in production. For dev, generate a temporary key at runtime
+# to avoid checking a secret into source control.
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or secrets.token_urlsafe(32)
 DEBUG = True
 ALLOWED_HOSTS = ['*']
 

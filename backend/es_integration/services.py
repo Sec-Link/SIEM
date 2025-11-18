@@ -6,6 +6,8 @@ import logging
 import inspect
 import urllib.request
 import urllib.error
+import base64
+from urllib.parse import urlparse
 
 from .models import ESIntegrationConfig
 
@@ -19,6 +21,18 @@ except Exception:
 logger = logging.getLogger(__name__)
 
 
+def _validate_url_scheme(url: str):
+    """Ensure the URL uses an allowed scheme (http or https)."""
+    try:
+        p = urlparse(url)
+        scheme = (p.scheme or '').lower()
+        if scheme not in ('http', 'https'):
+            raise ValueError(f'Unsupported URL scheme: {scheme}')
+    except Exception:
+        # raise a ValueError so callers can handle/skip unsafe URLs
+        raise
+
+
 def _detect_es_major_version(host_url: str, timeout: int = 5) -> int:
     """Try a simple HTTP GET to the ES host root and parse version number.
 
@@ -29,6 +43,8 @@ def _detect_es_major_version(host_url: str, timeout: int = 5) -> int:
             host_url = 'http://' + host_url
         if not host_url.endswith('/'):
             host_url = host_url + '/'
+        # validate scheme before opening URL (avoid file:/ or other schemes)
+        _validate_url_scheme(host_url)
         with urllib.request.urlopen(host_url, timeout=timeout) as resp:
             body = resp.read()
             data = json.loads(body.decode('utf-8'))
@@ -66,8 +82,20 @@ def _http_search(cfg: ESIntegrationConfig, body: dict, timeout: int = 30) -> Lis
     for compat_version in try_versions:
         media_type = f"application/vnd.elasticsearch+json; compatible-with={compat_version}"
         headers = {"Accept": media_type, "Content-Type": media_type}
+        # attach Authorization header when username/password present
+        try:
+            if cfg.username:
+                cred = f"{cfg.username}:{cfg.password or ''}"
+                b64 = base64.b64encode(cred.encode('utf-8')).decode('ascii')
+                # Use Basic auth header (base64 username:password) to satisfy ES WWW-Authenticate
+                headers['Authorization'] = f"Basic {b64}"
+        except Exception:
+            # if anything goes wrong building auth header, continue without it
+            pass
         req = urllib.request.Request(url, data=data, headers=headers, method='POST')
         try:
+            # validate target URL scheme
+            _validate_url_scheme(url)
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 text = resp.read().decode('utf-8')
                 res = json.loads(text)
@@ -90,6 +118,7 @@ def _http_search(cfg: ESIntegrationConfig, body: dict, timeout: int = 30) -> Lis
                         del body_nosort['sort']
                     data_n = json.dumps(body_nosort).encode('utf-8')
                     req2 = urllib.request.Request(url, data=data_n, headers=headers, method='POST')
+                    _validate_url_scheme(url)
                     with urllib.request.urlopen(req2, timeout=timeout) as resp2:
                         text2 = resp2.read().decode('utf-8')
                         res2 = json.loads(text2)
@@ -129,7 +158,17 @@ def _index_has_field(cfg: ESIntegrationConfig, field: str, timeout: int = 5) -> 
         host = host[:-1]
     url = f"{host}/{cfg.index}/_mapping"
     try:
-        req = urllib.request.Request(url, method='GET')
+        headers = {}
+        try:
+            if cfg.username:
+                cred = f"{cfg.username}:{cfg.password or ''}"
+                b64 = base64.b64encode(cred.encode('utf-8')).decode('ascii')
+                headers['Authorization'] = f"Basic {b64}"
+        except Exception:
+            pass
+
+        req = urllib.request.Request(url, method='GET', headers=headers)
+        _validate_url_scheme(url)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             text = resp.read().decode('utf-8')
             data = json.loads(text)
@@ -162,7 +201,17 @@ def _detect_timestamp_field(cfg: ESIntegrationConfig, candidates=None) -> str:
             return None
         host = hosts[0]
         url = f"{host.rstrip('/')}/{cfg.index}/_mapping"
-        req = urllib.request.Request(url, method='GET')
+        headers = {}
+        try:
+            if cfg.username:
+                cred = f"{cfg.username}:{cfg.password or ''}"
+                b64 = base64.b64encode(cred.encode('utf-8')).decode('ascii')
+                headers['Authorization'] = f"Basic {b64}"
+        except Exception:
+            pass
+
+        req = urllib.request.Request(url, method='GET', headers=headers)
+        _validate_url_scheme(url)
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read().decode('utf-8'))
             # Convert to string and search for field names (best-effort)
@@ -195,7 +244,17 @@ def _resolve_timestamp_sort_field(cfg: ESIntegrationConfig, detected_field: str,
     host = hosts[0]
     try:
         url = f"{host.rstrip('/')}/{cfg.index}/_mapping"
-        req = urllib.request.Request(url, method='GET')
+        headers = {}
+        try:
+            if cfg.username:
+                cred = f"{cfg.username}:{cfg.password or ''}"
+                b64 = base64.b64encode(cred.encode('utf-8')).decode('ascii')
+                headers['Authorization'] = f"Basic {b64}"
+        except Exception:
+            pass
+
+        req = urllib.request.Request(url, method='GET', headers=headers)
+        _validate_url_scheme(url)
         with urllib.request.urlopen(req, timeout=5) as resp:
             mapping = json.loads(resp.read().decode('utf-8'))
     except Exception as e:

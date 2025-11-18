@@ -6,10 +6,11 @@ from users.models import UserProfile
 
 class AlertApiTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='alice', password='Password123!')
+        test_password = User.objects.make_random_password()
+        self.user = User.objects.create_user(username='alice', password=test_password)
         UserProfile.objects.create(user=self.user, tenant_id='tenant_a')
         self.client = APIClient()
-        resp = self.client.post('/api/v1/auth/login', {'username': 'alice', 'password': 'Password123!'}, format='json')
+        resp = self.client.post('/api/v1/auth/login', {'username': 'alice', 'password': test_password}, format='json')
         self.assertEqual(resp.status_code, 200)
         token = resp.data['access']
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
