@@ -13,6 +13,8 @@ from django.utils import timezone
 
 GENERATED_DIR = os.path.join(settings.BASE_DIR, 'generated_tasks')
 os.makedirs(GENERATED_DIR, exist_ok=True)
+TASK_REQUESTS_DIR = os.path.join(settings.BASE_DIR, 'orchestrator_task_requests')
+os.makedirs(TASK_REQUESTS_DIR, exist_ok=True)
 
 # -----------------------------
 # 中文注释（文件级别说明）
@@ -34,10 +36,40 @@ class TaskViewSet(viewsets.ModelViewSet):
         task = serializer.save()
         # generate task config and DAG immediately
         self._generate_task_files(task)
+        # persist the incoming request payload to disk for auditing/debug
+        try:
+            self._write_task_request_log(self.request.data, task)
+        except Exception:
+            pass
 
     def perform_update(self, serializer):
         task = serializer.save()
         self._generate_task_files(task)
+        # persist update payload
+        try:
+            self._write_task_request_log(self.request.data, task)
+        except Exception:
+            pass
+
+    def _write_task_request_log(self, request_data, task: Task = None):
+        try:
+            ts = timezone.now().strftime('%Y%m%dT%H%M%S')
+            tid = getattr(task, 'id', None)
+            tname = getattr(task, 'name', None) or 'task'
+            filename = f"task_request_{tid or 'new'}_{ts}.json"
+            path = os.path.join(TASK_REQUESTS_DIR, filename)
+            payload = {
+                'logged_at': timezone.now().isoformat(),
+                'user': str(self.request.user) if hasattr(self, 'request') and getattr(self.request, 'user', None) else None,
+                'task_id': str(tid) if tid else None,
+                'task_name': tname,
+                'request_body': request_data,
+            }
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(payload, f, indent=2, ensure_ascii=False)
+            return path
+        except Exception:
+            return None
 
     def _generate_task_files(self, task: Task):
         # write config JSON

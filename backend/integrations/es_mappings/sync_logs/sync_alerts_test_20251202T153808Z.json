@@ -1,0 +1,195 @@
+{
+  "index": "alerts_test",
+  "rows": [
+    {
+      "es_id": "ALERT001",
+      "mapped": {
+        "alert_id": "ALERT001",
+        "message": "CPU usage exceeded threshold",
+        "severity": "Critical",
+        "source_index": "infra-alerts",
+        "tenant_id": "tenant_a",
+        "timestamp": "2025-10-16T08:00:00Z"
+      },
+      "raw": {
+        "alert_id": "ALERT001",
+        "tenant_id": "tenant_a",
+        "timestamp": "2025-10-16T08:00:00Z",
+        "severity": "Critical",
+        "message": "CPU usage exceeded threshold",
+        "source_index": "infra-alerts"
+      }
+    },
+    {
+      "es_id": "ALERT002",
+      "mapped": {
+        "alert_id": "ALERT002",
+        "message": "Disk space low",
+        "severity": "Warning",
+        "source_index": "infra-alerts",
+        "tenant_id": "tenant_b",
+        "timestamp": "2025-10-16T08:01:00Z"
+      },
+      "raw": {
+        "alert_id": "ALERT002",
+        "tenant_id": "tenant_b",
+        "timestamp": "2025-10-16T08:01:00Z",
+        "severity": "Warning",
+        "message": "Disk space low",
+        "source_index": "infra-alerts"
+      }
+    },
+    {
+      "es_id": "ALERT003",
+      "mapped": {
+        "alert_id": "ALERT003",
+        "message": "User login successful",
+        "severity": "Info",
+        "source_index": "auth-events",
+        "tenant_id": "tenant_c",
+        "timestamp": "2025-10-16T08:02:00Z"
+      },
+      "raw": {
+        "alert_id": "ALERT003",
+        "tenant_id": "tenant_c",
+        "timestamp": "2025-10-16T08:02:00Z",
+        "severity": "Info",
+        "message": "User login successful",
+        "source_index": "auth-events"
+      }
+    },
+    {
+      "es_id": "ALERT004",
+      "mapped": {
+        "alert_id": "ALERT004",
+        "message": "Memory leak detected",
+        "severity": "Critical",
+        "source_index": "infra-alerts",
+        "tenant_id": "tenant_a",
+        "timestamp": "2025-10-16T08:03:00Z"
+      },
+      "raw": {
+        "alert_id": "ALERT004",
+        "tenant_id": "tenant_a",
+        "timestamp": "2025-10-16T08:03:00Z",
+        "severity": "Critical",
+        "message": "Memory leak detected",
+        "source_index": "infra-alerts"
+      }
+    },
+    {
+      "es_id": "ALERT005",
+      "mapped": {
+        "alert_id": "ALERT005",
+        "message": "High latency on API",
+        "severity": "Warning",
+        "source_index": "api-metrics",
+        "tenant_id": "tenant_b",
+        "timestamp": "2025-10-16T08:04:00Z"
+      },
+      "raw": {
+        "alert_id": "ALERT005",
+        "tenant_id": "tenant_b",
+        "timestamp": "2025-10-16T08:04:00Z",
+        "severity": "Warning",
+        "message": "High latency on API",
+        "source_index": "api-metrics"
+      }
+    },
+    {
+      "es_id": "ALERT006",
+      "mapped": {
+        "alert_id": "ALERT006",
+        "message": "Unauthorized access attempt",
+        "severity": "Critical",
+        "source_index": "security-logs",
+        "tenant_id": "tenant_c",
+        "timestamp": "2025-10-16T08:05:00Z"
+      },
+      "raw": {
+        "alert_id": "ALERT006",
+        "tenant_id": "tenant_c",
+        "timestamp": "2025-10-16T08:05:00Z",
+        "severity": "Critical",
+        "message": "Unauthorized access attempt",
+        "source_index": "security-logs"
+      }
+    },
+    {
+      "es_id": "ALERT007",
+      "mapped": {
+        "alert_id": "ALERT007",
+        "message": "Backup completed",
+        "severity": "Info",
+        "source_index": "maintenance",
+        "tenant_id": "tenant_a",
+        "timestamp": "2025-10-16T08:06:00Z"
+      },
+      "raw": {
+        "alert_id": "ALERT007",
+        "tenant_id": "tenant_a",
+        "timestamp": "2025-10-16T08:06:00Z",
+        "severity": "Info",
+        "message": "Backup completed",
+        "source_index": "maintenance"
+      }
+    },
+    {
+      "es_id": "ALERT008",
+      "mapped": {
+        "alert_id": "ALERT008",
+        "message": "Database connection failures",
+        "severity": "Critical",
+        "source_index": "db-alerts",
+        "tenant_id": "tenant_b",
+        "timestamp": "2025-10-16T08:07:00Z"
+      },
+      "raw": {
+        "alert_id": "ALERT008",
+        "tenant_id": "tenant_b",
+        "timestamp": "2025-10-16T08:07:00Z",
+        "severity": "Critical",
+        "message": "Database connection failures",
+        "source_index": "db-alerts"
+      }
+    },
+    {
+      "es_id": "ALERT009",
+      "mapped": {
+        "alert_id": "ALERT009",
+        "message": "SSL certificate expiring soon",
+        "severity": "Warning",
+        "source_index": "security-logs",
+        "tenant_id": "tenant_c",
+        "timestamp": "2025-10-16T08:08:00Z"
+      },
+      "raw": {
+        "alert_id": "ALERT009",
+        "tenant_id": "tenant_c",
+        "timestamp": "2025-10-16T08:08:00Z",
+        "severity": "Warning",
+        "message": "SSL certificate expiring soon",
+        "source_index": "security-logs"
+      }
+    },
+    {
+      "es_id": "ALERT010",
+      "mapped": {
+        "alert_id": "ALERT010",
+        "message": "Cache warmed",
+        "severity": "Info",
+        "source_index": "infra-alerts",
+        "tenant_id": "tenant_a",
+        "timestamp": "2025-10-16T08:09:00Z"
+      },
+      "raw": {
+        "alert_id": "ALERT010",
+        "tenant_id": "tenant_a",
+        "timestamp": "2025-10-16T08:09:00Z",
+        "severity": "Info",
+        "message": "Cache warmed",
+        "source_index": "infra-alerts"
+      }
+    }
+  ]
+}

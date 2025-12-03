@@ -1,0 +1,36 @@
+{
+  "index": "alerts_test",
+  "table": "es_imports",
+  "columns": [
+    {
+      "orig_name": "alert_id",
+      "colname": "alert_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "message",
+      "colname": "message",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "severity",
+      "colname": "severity",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "source_index",
+      "colname": "source_index",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "tenant_id",
+      "colname": "tenant_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "timestamp",
+      "colname": "timestamp",
+      "sql_type": "timestamptz"
+    }
+  ]
+}

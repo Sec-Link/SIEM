@@ -1,0 +1,166 @@
+{
+  "index": "alerts",
+  "table": "dev102",
+  "columns": [
+    {
+      "orig_name": "@timestamp",
+      "colname": "_timestamp",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "alert_id",
+      "colname": "alert_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "category",
+      "colname": "category",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "date",
+      "colname": "date",
+      "sql_type": "timestamptz"
+    },
+    {
+      "orig_name": "description",
+      "colname": "description",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "destination",
+      "colname": "destination",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "dst_host",
+      "colname": "dst_host",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "event_id",
+      "colname": "event_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "firstactivitytime",
+      "colname": "firstactivitytime",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "host",
+      "colname": "host",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "message",
+      "colname": "message",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "observer_ip",
+      "colname": "observer_ip",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "program",
+      "colname": "program",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "raw",
+      "colname": "raw",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "raw_timestamp",
+      "colname": "raw_timestamp",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "references",
+      "colname": "references",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "risk_object",
+      "colname": "risk_object",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "risk_score",
+      "colname": "risk_score",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "rule_id",
+      "colname": "rule_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "rule_name",
+      "colname": "rule_name",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "severity",
+      "colname": "severity",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "source_ip",
+      "colname": "source_ip",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "src_ip",
+      "colname": "src_ip",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "tactic_id",
+      "colname": "tactic_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "tactic_name",
+      "colname": "tactic_name",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "tags",
+      "colname": "tags",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "technique_id",
+      "colname": "technique_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "technique_name",
+      "colname": "technique_name",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "tenant_id",
+      "colname": "tenant_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "timestamp",
+      "colname": "timestamp",
+      "sql_type": "timestamptz"
+    },
+    {
+      "orig_name": "title",
+      "colname": "title",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "url",
+      "colname": "url",
+      "sql_type": "text"
+    }
+  ]
+}

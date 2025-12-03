@@ -37,6 +37,17 @@ def execute_task(task: Task) -> TaskRun:
             except Integration.DoesNotExist as nde:
                 raise Exception(f"Integration not found: {nde}")
 
+            # If task provides a table override, inject it into a copy of the dest integration config
+            if cfg.get('table'):
+                try:
+                    import copy
+                    dest_it = copy.deepcopy(dest_it)
+                    dest_cfg = dest_it.config or {}
+                    dest_cfg['table'] = cfg.get('table')
+                    dest_it.config = dest_cfg
+                except Exception:
+                    pass
+
             log_lines.append(f"Starting ES->DB sync from index={index} limit={limit}")
             query = cfg.get('query')
             # if no explicit query, try to compute a range from timestamp fields (caller may set this)
@@ -44,7 +55,18 @@ def execute_task(task: Task) -> TaskRun:
                 query = { 'query': { 'range': { cfg.get('timestamp_field'): { 'gte': cfg.get('timestamp_from'), 'lte': cfg.get('timestamp_to', 'now') } } } }
 
             res = sync_es_to_db(es_it, index, dest_it, query=query, limit=limit)
-            log_lines.append(f"Sync result: {json.dumps(res)}")
+            log_lines.append(f"Sync result: {json.dumps({k:v for k,v in res.items() if k!='rows' and k!='log_path'})}")
+            # if sync produced a log file, try to include its contents
+            try:
+                lp = res.get('log_path')
+                if lp:
+                    import os
+                    if os.path.isfile(lp):
+                        with open(lp, 'r', encoding='utf-8') as lf:
+                            log_lines.append('\n---- sync log file ----')
+                            log_lines.append(lf.read())
+            except Exception:
+                pass
         else:
             log_lines.append(f"Executing task {task.id}")
             log_lines.append(f"Config: {json.dumps(task.config)}")

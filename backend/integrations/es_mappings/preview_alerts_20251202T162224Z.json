@@ -1,0 +1,229 @@
+{
+  "index": "alerts",
+  "columns": [
+    {
+      "orig_name": "@timestamp",
+      "colname": "_timestamp",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "alert_id",
+      "colname": "alert_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "311773fa6e86cb09bd51ab291f337b854b16c0f541460b8469729b7372427e96"
+    },
+    {
+      "orig_name": "category",
+      "colname": "category",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "External Attack"
+    },
+    {
+      "orig_name": "date",
+      "colname": "date",
+      "es_type": "date",
+      "sql_type": "timestamptz",
+      "sample": "2025-11-03T07:08:56.299Z"
+    },
+    {
+      "orig_name": "description",
+      "colname": "description",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "waf alert"
+    },
+    {
+      "orig_name": "destination",
+      "colname": "destination",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "www.seclink.info:443"
+    },
+    {
+      "orig_name": "dst_host",
+      "colname": "dst_host",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "event_id",
+      "colname": "event_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "firstactivitytime",
+      "colname": "firstactivitytime",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "2025-11-03T15:07:40+08:00"
+    },
+    {
+      "orig_name": "host",
+      "colname": "host",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "message",
+      "colname": "message",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "observer_ip",
+      "colname": "observer_ip",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "172.71.120.19"
+    },
+    {
+      "orig_name": "program",
+      "colname": "program",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "raw",
+      "colname": "raw",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"172.71.120.19\",\"rule_id\":\"m_cmd_injection\",\"event_id\":\"1426\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/webadm/?q=moni_detail.do&action=gragh\",\"timestamp\":\" Nov 03 15:07:40\"}"
+    },
+    {
+      "orig_name": "raw_timestamp",
+      "colname": "raw_timestamp",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "references",
+      "colname": "references",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": ""
+    },
+    {
+      "orig_name": "risk_object",
+      "colname": "risk_object",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "risk_score",
+      "colname": "risk_score",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "21"
+    },
+    {
+      "orig_name": "rule_id",
+      "colname": "rule_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "beb3d444-e8f2-4251-9457-804ed345a28e"
+    },
+    {
+      "orig_name": "rule_name",
+      "colname": "rule_name",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "severity",
+      "colname": "severity",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "low"
+    },
+    {
+      "orig_name": "source_ip",
+      "colname": "source_ip",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "172.71.120.19"
+    },
+    {
+      "orig_name": "src_ip",
+      "colname": "src_ip",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "tactic_id",
+      "colname": "tactic_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "tactic_name",
+      "colname": "tactic_name",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "tags",
+      "colname": "tags",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": ""
+    },
+    {
+      "orig_name": "technique_id",
+      "colname": "technique_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "technique_name",
+      "colname": "technique_name",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "tenant_id",
+      "colname": "tenant_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "timestamp",
+      "colname": "timestamp",
+      "es_type": "date",
+      "sql_type": "timestamptz",
+      "sample": null
+    },
+    {
+      "orig_name": "title",
+      "colname": "title",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "waf alert"
+    },
+    {
+      "orig_name": "url",
+      "colname": "url",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    }
+  ]
+}

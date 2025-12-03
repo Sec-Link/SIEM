@@ -1,0 +1,403 @@
+{
+  "index": "alerts",
+  "mapping_columns": [
+    {
+      "orig_name": "@timestamp",
+      "colname": "_timestamp",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "alert_id",
+      "colname": "alert_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "311773fa6e86cb09bd51ab291f337b854b16c0f541460b8469729b7372427e96"
+    },
+    {
+      "orig_name": "category",
+      "colname": "category",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "External Attack"
+    },
+    {
+      "orig_name": "date",
+      "colname": "date",
+      "es_type": "date",
+      "sql_type": "timestamptz",
+      "sample": "2025-11-03T07:08:56.299Z"
+    },
+    {
+      "orig_name": "description",
+      "colname": "description",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "waf alert"
+    },
+    {
+      "orig_name": "destination",
+      "colname": "destination",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "www.seclink.info:443"
+    },
+    {
+      "orig_name": "dst_host",
+      "colname": "dst_host",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "event_id",
+      "colname": "event_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "firstactivitytime",
+      "colname": "firstactivitytime",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "2025-11-03T15:07:40+08:00"
+    },
+    {
+      "orig_name": "host",
+      "colname": "host",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "message",
+      "colname": "message",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "observer_ip",
+      "colname": "observer_ip",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "172.71.120.19"
+    },
+    {
+      "orig_name": "program",
+      "colname": "program",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "raw",
+      "colname": "raw",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"172.71.120.19\",\"rule_id\":\"m_cmd_injection\",\"event_id\":\"1426\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/webadm/?q=moni_detail.do&action=gragh\",\"timestamp\":\" Nov 03 15:07:40\"}"
+    },
+    {
+      "orig_name": "raw_timestamp",
+      "colname": "raw_timestamp",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "references",
+      "colname": "references",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": ""
+    },
+    {
+      "orig_name": "risk_object",
+      "colname": "risk_object",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "risk_score",
+      "colname": "risk_score",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "21"
+    },
+    {
+      "orig_name": "rule_id",
+      "colname": "rule_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "beb3d444-e8f2-4251-9457-804ed345a28e"
+    },
+    {
+      "orig_name": "rule_name",
+      "colname": "rule_name",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "severity",
+      "colname": "severity",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "low"
+    },
+    {
+      "orig_name": "source_ip",
+      "colname": "source_ip",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "172.71.120.19"
+    },
+    {
+      "orig_name": "src_ip",
+      "colname": "src_ip",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "tactic_id",
+      "colname": "tactic_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "tactic_name",
+      "colname": "tactic_name",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "tags",
+      "colname": "tags",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": ""
+    },
+    {
+      "orig_name": "technique_id",
+      "colname": "technique_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "technique_name",
+      "colname": "technique_name",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "tenant_id",
+      "colname": "tenant_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    },
+    {
+      "orig_name": "timestamp",
+      "colname": "timestamp",
+      "es_type": "date",
+      "sql_type": "timestamptz",
+      "sample": null
+    },
+    {
+      "orig_name": "title",
+      "colname": "title",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "waf alert"
+    },
+    {
+      "orig_name": "url",
+      "colname": "url",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": null
+    }
+  ],
+  "sample_docs": [
+    {
+      "date": "2025-11-03T07:08:56.299Z",
+      "alert_id": "311773fa6e86cb09bd51ab291f337b854b16c0f541460b8469729b7372427e96",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "172.71.120.19",
+      "firstactivitytime": "2025-11-03T15:07:40+08:00",
+      "observer_ip": "172.71.120.19",
+      "destination": "www.seclink.info:443",
+      "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"172.71.120.19\",\"rule_id\":\"m_cmd_injection\",\"event_id\":\"1426\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/webadm/?q=moni_detail.do&action=gragh\",\"timestamp\":\" Nov 03 15:07:40\"}"
+    },
+    {
+      "date": "2025-11-03T07:08:56.293Z",
+      "alert_id": "7647acc97876bb219f16029c480392430bf47555ed4a6c6d48c03270ffdfb0a1",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "172.71.120.19",
+      "firstactivitytime": "2025-11-03T15:07:39+08:00",
+      "observer_ip": "172.71.120.19",
+      "destination": "www.seclink.info:443",
+      "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"172.71.120.19\",\"rule_id\":\"m_sqli \",\"event_id\":\"1425\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/zentao/user-login.html\",\"timestamp\":\" Nov 03 15:07:39\"}"
+    },
+    {
+      "date": "2025-11-03T07:08:56.305Z",
+      "alert_id": "72ac4521ac29180446f05b0b3cc709ce40fdf3311e9a2afd1be65aa4df87a458",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "172.70.50.32",
+      "firstactivitytime": "2025-11-03T15:08:29+08:00",
+      "observer_ip": "172.70.50.32",
+      "destination": "www.seclink.info:443",
+      "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"172.70.50.32\",\"rule_id\":\"m_php_code_injection\",\"event_id\":\"1427\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/general/index/UploadFile.php?m=uploadPicture&uploadType=eoffice_logo&userId\",\"timestamp\":\" Nov 03 15:08:29\"}"
+    },
+    {
+      "date": "2025-11-03T07:08:56.287Z",
+      "alert_id": "4a8a4eca87b9a6f673f26cc54dadf54b7a3b5db9f3764d7b79162feef45ea946",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "172.70.50.33",
+      "firstactivitytime": "2025-11-03T15:07:39+08:00",
+      "observer_ip": "172.70.50.33",
+      "destination": "www.seclink.info:443",
+      "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"172.70.50.33\",\"rule_id\":\"m_rule/33e75ff09dd601bbe69f351039152189\",\"event_id\":\"1424\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/public/index.php?s=/index/qrcode/download/url/L2V0Yy9wYXNzd2Q=\",\"timestamp\":\" Nov 03 15:07:39\"}"
+    },
+    {
+      "date": "2025-11-03T07:09:56.220Z",
+      "alert_id": "70a04896238cb7c917e20ccc64baf5abdf5fd846429ffd583404181d12dc6263",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "108.162.241.47",
+      "firstactivitytime": "2025-11-03T15:09:15+08:00",
+      "observer_ip": "108.162.241.47",
+      "destination": "www.seclink.info:443",
+      "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"108.162.241.47\",\"rule_id\":\"m_rule/88a4a7227e81d064b551f52f7f51e6c8\",\"event_id\":\"1431\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/servlet/~ic/bsh.servlet.BshServlet\",\"timestamp\":\" Nov 03 15:09:15\"}"
+    },
+    {
+      "date": "2025-11-03T07:09:56.214Z",
+      "alert_id": "f759157dde1195dbef7297d3a39e0fce852b3148a14d76cded2fb581ca6a4d8b",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "172.69.214.136",
+      "firstactivitytime": "2025-11-03T15:09:12+08:00",
+      "observer_ip": "172.69.214.136",
+      "destination": "www.seclink.info:443",
+      "raw": "{\"src_city\":\"安大略省爱德华王子县\",\"src_ip\":\"172.69.214.136\",\"rule_id\":\"m_rule/33e75ff09dd601bbe69f351039152189\",\"event_id\":\"1430\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/sys/ui/extend/varkind/custom.jsp\",\"timestamp\":\" Nov 03 15:09:12\"}"
+    },
+    {
+      "date": "2025-11-03T07:09:56.173Z",
+      "alert_id": "6721f71758dc4981a7284b94c9f9e6991b4f98893f96be48d2f009f1ecf5636e",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "172.70.50.32",
+      "firstactivitytime": "2025-11-03T15:09:11+08:00",
+      "observer_ip": "172.70.50.32",
+      "destination": "www.seclink.info:443",
+      "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"172.70.50.32\",\"rule_id\":\"m_java \",\"event_id\":\"1428\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/seeyon/htmlofficeservlet\",\"timestamp\":\" Nov 03 15:09:11\"}"
+    },
+    {
+      "date": "2025-11-03T07:09:56.206Z",
+      "alert_id": "047cfea087349624199a271110ab825af8bc31760a15585fac0297c6337cfdaa",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "108.162.241.47",
+      "firstactivitytime": "2025-11-03T15:09:11+08:00",
+      "observer_ip": "108.162.241.47",
+      "destination": "www.seclink.info:443",
+      "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"108.162.241.47\",\"rule_id\":\"m_rule/88a4a7227e81d064b551f52f7f51e6c8\",\"event_id\":\"1429\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/servlet/~ic/bsh.servlet.BshServlet\",\"timestamp\":\" Nov 03 15:09:11\"}"
+    },
+    {
+      "date": "2025-11-03T07:08:56.235Z",
+      "alert_id": "a794d1f739b5a1b19f3d996ba1462d6fa9e89dcf417822a89cc5855832197238",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "108.162.241.47",
+      "firstactivitytime": "2025-11-03T15:07:37+08:00",
+      "observer_ip": "108.162.241.47",
+      "destination": "www.seclink.info:443",
+      "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"108.162.241.47\",\"rule_id\":\"m_rule/33e75ff09dd601bbe69f351039152189\",\"event_id\":\"1419\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/export/classroom-course-statistics?fileNames[]=../../../../../../../etc/passwd\",\"timestamp\":\" Nov 03 15:07:37\"}"
+    },
+    {
+      "date": "2025-11-03T07:08:56.263Z",
+      "alert_id": "8205061052bf33129ffeeffcd224c9de0e62e7f08fbbab2cbf58568b2e9b8fec",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "108.162.241.47",
+      "firstactivitytime": "2025-11-03T15:07:38+08:00",
+      "observer_ip": "108.162.241.47",
+      "destination": "www.seclink.info:443",
+      "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"108.162.241.47\",\"rule_id\":\"m_rule/88a4a7227e81d064b551f52f7f51e6c8\",\"event_id\":\"1421\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"www.seclink.info:443\",\"url\":\"/bsh.servlet.BshServlet\",\"timestamp\":\" Nov 03 15:07:38\"}"
+    }
+  ],
+  "extraction": [],
+  "errors": []
+}

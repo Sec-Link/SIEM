@@ -1,0 +1,47 @@
+{
+  "index": "alerts_test",
+  "columns": [
+    {
+      "orig_name": "alert_id",
+      "colname": "alert_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "vpZAJZoBQUHKddHotNbZ"
+    },
+    {
+      "orig_name": "message",
+      "colname": "message",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "Test alert: CPU usage high"
+    },
+    {
+      "orig_name": "severity",
+      "colname": "severity",
+      "es_type": "keyword",
+      "sql_type": "text",
+      "sample": "Critical"
+    },
+    {
+      "orig_name": "source_index",
+      "colname": "source_index",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "alerts_test"
+    },
+    {
+      "orig_name": "tenant_id",
+      "colname": "tenant_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "tenant_a"
+    },
+    {
+      "orig_name": "timestamp",
+      "colname": "timestamp",
+      "es_type": "date",
+      "sql_type": "timestamptz",
+      "sample": "2025-10-27T10:00:00Z"
+    }
+  ]
+}

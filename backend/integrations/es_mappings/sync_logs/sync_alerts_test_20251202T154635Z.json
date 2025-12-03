@@ -1,0 +1,131 @@
+{
+  "index": "alerts_test",
+  "mapping_columns": [
+    {
+      "orig_name": "alert_id",
+      "colname": "alert_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "vpZAJZoBQUHKddHotNbZ"
+    },
+    {
+      "orig_name": "message",
+      "colname": "message",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "Test alert: CPU usage high"
+    },
+    {
+      "orig_name": "severity",
+      "colname": "severity",
+      "es_type": "keyword",
+      "sql_type": "text",
+      "sample": "Critical"
+    },
+    {
+      "orig_name": "source_index",
+      "colname": "source_index",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "alerts_test"
+    },
+    {
+      "orig_name": "tenant_id",
+      "colname": "tenant_id",
+      "es_type": "text",
+      "sql_type": "text",
+      "sample": "tenant_a"
+    },
+    {
+      "orig_name": "timestamp",
+      "colname": "timestamp",
+      "es_type": "date",
+      "sql_type": "timestamptz",
+      "sample": "2025-10-27T10:00:00Z"
+    }
+  ],
+  "sample_docs": [
+    {
+      "tenant_id": "tenant_a",
+      "severity": "Critical",
+      "alert_id": "vpZAJZoBQUHKddHotNbZ",
+      "message": "Test alert: CPU usage high",
+      "source_index": "alerts_test",
+      "timestamp": "2025-10-27T10:00:00Z"
+    },
+    {
+      "tenant_id": "tenant_a",
+      "severity": "Info",
+      "alert_id": "LUtBJZoBySQhn2rNMHDH",
+      "message": "Test alert: RCE Alert",
+      "source_index": "alerts_test",
+      "timestamp": "2025-10-27T10:00:00Z"
+    },
+    {
+      "tenant_id": "tenant_a",
+      "source_index": "firewall",
+      "message": "Brute force login attempt detected from 192.168.1.100",
+      "severity": "Critical",
+      "timestamp": "2025-10-28T08:01:00Z",
+      "alert_id": "ALERT001"
+    },
+    {
+      "tenant_id": "tenant_a",
+      "source_index": "waf",
+      "message": "SQL Injection attempt on /login.php",
+      "severity": "Critical",
+      "timestamp": "2025-10-28T08:05:00Z",
+      "alert_id": "ALERT002"
+    },
+    {
+      "tenant_id": "tenant_a",
+      "source_index": "ids",
+      "message": "Port scan detected from 10.0.0.5",
+      "severity": "Warning",
+      "timestamp": "2025-10-28T08:10:00Z",
+      "alert_id": "ALERT003"
+    },
+    {
+      "tenant_id": "tenant_a",
+      "source_index": "edr",
+      "message": "Ransomware behavior detected on host WIN-7A2",
+      "severity": "Critical",
+      "timestamp": "2025-10-28T08:15:00Z",
+      "alert_id": "ALERT004"
+    },
+    {
+      "tenant_id": "tenant_a",
+      "source_index": "siem",
+      "message": "Multiple failed login attempts for user admin",
+      "severity": "Warning",
+      "timestamp": "2025-10-28T08:20:00Z",
+      "alert_id": "ALERT005"
+    },
+    {
+      "tenant_id": "tenant_a",
+      "source_index": "firewall",
+      "message": "Data exfiltration detected to 8.8.8.8",
+      "severity": "Critical",
+      "timestamp": "2025-10-28T08:25:00Z",
+      "alert_id": "ALERT006"
+    },
+    {
+      "tenant_id": "tenant_a",
+      "source_index": "ids",
+      "message": "Suspicious PowerShell command executed",
+      "severity": "Info",
+      "timestamp": "2025-10-28T08:30:00Z",
+      "alert_id": "ALERT007"
+    },
+    {
+      "tenant_id": "tenant_a",
+      "source_index": "waf",
+      "message": "Cross-site scripting (XSS) attempt blocked",
+      "severity": "Warning",
+      "timestamp": "2025-10-28T08:35:00Z",
+      "alert_id": "ALERT008"
+    }
+  ],
+  "extraction": [],
+  "errors": []
+}

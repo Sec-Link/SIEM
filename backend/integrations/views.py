@@ -13,6 +13,37 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from requests.auth import HTTPBasicAuth
 from rest_framework.permissions import IsAuthenticated
+import os
+import datetime
+
+# Helper to write a detailed sync debug log when sync fails or imports zero rows.
+def _write_sync_debug_log(index, mapping_columns, docs, extraction_results=None, errors=None, exc_tb=None, name=None):
+    try:
+        out_dir = os.path.join(os.path.dirname(__file__), 'es_mappings', 'sync_logs')
+        os.makedirs(out_dir, exist_ok=True)
+        ts = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+        if name:
+            import re
+            safe_name = re.sub(r'[^0-9a-zA-Z_]', '_', str(name))
+            fn = f"sync_{safe_name}_{ts}.json"
+        else:
+            safe_index = str(index).replace('/', '_').replace('\\', '_')
+            fn = f"sync_{safe_index}_{ts}.json"
+        path = os.path.join(out_dir, fn)
+        payload = {
+            'index': index,
+            'mapping_columns': mapping_columns,
+            'sample_docs': (docs or [])[:10],
+            'extraction': extraction_results or [],
+            'errors': errors or []
+        }
+        if exc_tb:
+            payload['traceback'] = exc_tb
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=2)
+        return path
+    except Exception:
+        return None
 # -----------------------------
 # 中文注释（文件级别说明）
 #
@@ -69,14 +100,54 @@ def sync_es_to_db(es_integration: Integration, index: str, dest_integration: Int
         docs = [h.get('_source', {}) for h in hits]
         # also capture ES document ids if present for upsert
         es_ids = [h.get('_id') for h in hits]
+        # prepare extraction results for debug logging
+        extraction_results = []
 
         # dest integration: expect type 'postgresql' or 'mysql' and config with connection string or params
         if dest_integration.type in ('postgresql', 'mysql'):
             imported = 0
             errors = []
             table = dest_cfg.get('table') or 'es_imports'
-            # optional mapping: dest_cfg.columns = [{ orig_name, colname, sql_type }, ...]
-            mapping_columns = dest_cfg.get('columns') or None
+            # Determine mapping columns: prefer a saved mapping file for this index, fall back to integration config
+            mapping_columns = None
+            try:
+                import os, json
+                mappings_dir = os.path.join(os.path.dirname(__file__), 'es_mappings')
+                # prefer a mapping file that was saved for the target table name
+                if os.path.isdir(mappings_dir):
+                    for fn in os.listdir(mappings_dir):
+                        if not fn.lower().endswith('.json'):
+                            continue
+                        fp = os.path.join(mappings_dir, fn)
+                        try:
+                            with open(fp, 'r', encoding='utf-8') as fh:
+                                data = json.load(fh)
+                            # file format may include: { index: <index>, table: <table>, columns: [...] }
+                            if isinstance(data, dict) and data.get('table') == table and isinstance(data.get('columns'), list):
+                                mapping_columns = data.get('columns')
+                                break
+                        except Exception:
+                            continue
+                # fallback to index-named mapping file if no table-specific mapping found
+                if not mapping_columns and os.path.isdir(mappings_dir):
+                    for fn in os.listdir(mappings_dir):
+                        if not fn.lower().endswith('.json'):
+                            continue
+                        fp = os.path.join(mappings_dir, fn)
+                        try:
+                            with open(fp, 'r', encoding='utf-8') as fh:
+                                data = json.load(fh)
+                            # older files may only include index -> columns
+                            if isinstance(data, dict) and data.get('index') == index and isinstance(data.get('columns'), list):
+                                mapping_columns = data.get('columns')
+                                break
+                        except Exception:
+                            continue
+            except Exception:
+                mapping_columns = None
+            # fallback to integration config if no mapping file found
+            if not mapping_columns:
+                mapping_columns = dest_cfg.get('columns') or None
             # prefer a direct psycopg2 connection for Postgres (conn_str) as it gives better control
             conn_str = dest_cfg.get('conn_str')
             # If conn_str not provided, try to build one from individual params in config
@@ -157,12 +228,16 @@ def sync_es_to_db(es_integration: Integration, index: str, dest_integration: Int
                                 for i, doc in enumerate(docs):
                                     esid = es_ids[i] if i < len(es_ids) else None
                                     mapped_vals = []
+                                    mapped_map = {}
                                     for mc in mapping_columns:
                                         orig = mc.get('orig_name') or mc.get('orig') or mc.get('name')
                                         val = get_in(doc, orig) if orig and isinstance(orig, str) and ('.' in orig) else (doc.get(orig) if orig else None)
                                         mapped_vals.append(val)
+                                        colname = mc.get('colname') or mc.get('name')
+                                        mapped_map[colname] = val
                                     # final row: (esid, *mapped_vals, json.dumps(doc))
                                     rows.append((esid, *mapped_vals, json.dumps(doc)))
+                                    extraction_results.append({'es_id': esid, 'mapped': mapped_map, 'raw': doc})
                                 if rows:
                                     # build column list for INSERT
                                     mapped_col_names = [mc.get('colname') or mc.get('name') for mc in mapping_columns if (mc.get('colname') or mc.get('name'))]
@@ -186,6 +261,16 @@ def sync_es_to_db(es_integration: Integration, index: str, dest_integration: Int
                                     ).format(tbl=sql.Identifier(table))
                                     execute_values(cur, insert_stmt.as_string(conn), rows, template=None, page_size=100)
                                 imported = len(rows)
+                    # if nothing imported, write a debug log and return its path
+                    if imported == 0:
+                        try:
+                            log_path = _write_sync_debug_log(index, mapping_columns, docs, extraction_results=extraction_results, errors=errors, name=table)
+                        except Exception:
+                            log_path = None
+                        res = {'status': 'ok', 'imported': imported, 'errors': errors}
+                        if log_path:
+                            res['log_path'] = log_path
+                        return res
                     return {'status': 'ok', 'imported': imported, 'errors': errors}
                 except Exception as e:
                     return {'status': 'error', 'message': str(e)}
@@ -227,6 +312,15 @@ def sync_es_to_db(es_integration: Integration, index: str, dest_integration: Int
                             conn.commit()
                         finally:
                             conn.close()
+                        if imported == 0:
+                            try:
+                                log_path = _write_sync_debug_log(index, mapping_columns, docs, extraction_results=extraction_results, errors=errors, name=table)
+                            except Exception:
+                                log_path = None
+                            res = {'status': 'ok', 'imported': imported, 'errors': errors}
+                            if log_path:
+                                res['log_path'] = log_path
+                            return res
                         return {'status': 'ok', 'imported': imported, 'errors': errors}
                 except Exception:
                     # fall through to django_db fallback
@@ -246,9 +340,44 @@ def sync_es_to_db(es_integration: Integration, index: str, dest_integration: Int
                         except Exception:
                             # older PG versions may not support IF NOT EXISTS on index creation
                             pass
-                        # ensure any mapped columns exist if the integration config has them
+                        # ensure any mapped columns exist: prefer saved mapping file, fallback to integration config
                         try:
-                            mapping_columns = dest_cfg.get('columns') or None
+                            mapping_columns = None
+                            try:
+                                import os, json
+                                mappings_dir = os.path.join(os.path.dirname(__file__), 'es_mappings')
+                                # prefer mapping keyed by target table
+                                if os.path.isdir(mappings_dir):
+                                    for fn in os.listdir(mappings_dir):
+                                        if not fn.lower().endswith('.json'):
+                                            continue
+                                        fp = os.path.join(mappings_dir, fn)
+                                        try:
+                                            with open(fp, 'r', encoding='utf-8') as fh:
+                                                data = json.load(fh)
+                                            if isinstance(data, dict) and data.get('table') == table and isinstance(data.get('columns'), list):
+                                                mapping_columns = data.get('columns')
+                                                break
+                                        except Exception:
+                                            continue
+                                # fallback to index match
+                                if not mapping_columns and os.path.isdir(mappings_dir):
+                                    for fn in os.listdir(mappings_dir):
+                                        if not fn.lower().endswith('.json'):
+                                            continue
+                                        fp = os.path.join(mappings_dir, fn)
+                                        try:
+                                            with open(fp, 'r', encoding='utf-8') as fh:
+                                                data = json.load(fh)
+                                            if isinstance(data, dict) and data.get('index') == index and isinstance(data.get('columns'), list):
+                                                mapping_columns = data.get('columns')
+                                                break
+                                        except Exception:
+                                            continue
+                            except Exception:
+                                mapping_columns = None
+                            if not mapping_columns:
+                                mapping_columns = dest_cfg.get('columns') or None
                             if mapping_columns and isinstance(mapping_columns, list):
                                 for mc in mapping_columns:
                                     colname = mc.get('colname') or mc.get('name')
@@ -267,13 +396,30 @@ def sync_es_to_db(es_integration: Integration, index: str, dest_integration: Int
                                 imported += 1
                             except Exception as ie:
                                 errors.append(str(ie))
+                    if imported == 0:
+                        try:
+                            log_path = _write_sync_debug_log(index, mapping_columns, docs, extraction_results=extraction_results, errors=errors, name=table)
+                        except Exception:
+                            log_path = None
+                        res = {'status': 'ok', 'imported': imported, 'errors': errors}
+                        if log_path:
+                            res['log_path'] = log_path
+                        return res
                     return {'status': 'ok', 'imported': imported, 'errors': errors}
                 except Exception as e:
                     return {'status': 'error', 'message': str(e)}
             return {'status': 'error', 'message': 'Unsupported dest integration or missing connection details'}
         return {'status': 'error', 'message': 'Unsupported destination integration type'}
     except Exception as e:
-        return {'status': 'error', 'message': str(e)}
+        try:
+            tb = traceback.format_exc()
+            log_path = _write_sync_debug_log(index if 'index' in locals() else None, None, None, extraction_results=None, errors=[str(e)], exc_tb=tb, name=(dest_cfg.get('table') if 'dest_cfg' in locals() else None))
+        except Exception:
+            log_path = None
+        res = {'status': 'error', 'message': str(e)}
+        if log_path:
+            res['log_path'] = log_path
+        return res
 
 
 @csrf_exempt
@@ -299,7 +445,36 @@ def preview_es_index(request):
         search_url = host.rstrip('/') + f"/{index}/_search?size={size}"
         # Allow caller to supply a custom ES query
         user_query = data.get('query')
-        es_query = user_query if user_query else {"query": {"match_all": {}}}
+        es_query = user_query if user_query else None
+
+        # If no explicit query provided, but caller supplied timestamp selection fields,
+        # build an ES range query so Preview Data respects the time filter.
+        if not es_query:
+            ts_field = data.get('timestamp_field')
+            ts_from = data.get('timestamp_from')
+            ts_to = data.get('timestamp_to')
+            ts_rel = data.get('timestamp_relative')
+            # normalize custom relative
+            if isinstance(ts_rel, dict) and ts_rel.get('value') and ts_rel.get('unit'):
+                ts_from = f"now-{int(ts_rel.get('value'))}{ts_rel.get('unit')}"
+                ts_to = 'now'
+            elif isinstance(ts_rel, str) and ts_rel:
+                # support preset formats like '1h','6h','24h','7d'
+                m = None
+                try:
+                    import re
+                    m = re.match(r'^(\d+)([mhd])$', ts_rel)
+                except Exception:
+                    m = None
+                if m:
+                    ts_from = f"now-{int(m.group(1))}{m.group(2)}"
+                    ts_to = 'now'
+
+            if ts_field and ts_from:
+                es_query = {"query": {"range": {ts_field: {"gte": ts_from, "lte": ts_to or 'now'}}}}
+
+        if not es_query:
+            es_query = {"query": {"match_all": {}}}
         r = requests.post(search_url, json=es_query, auth=auth, timeout=15)
         r.raise_for_status()
         hits = r.json().get('hits', {}).get('hits', [])
@@ -845,7 +1020,33 @@ def integrations_create_table_from_es(request):
                     provided_sql = meta.get('sql_type') if isinstance(meta, dict) else None
                     sql_t = provided_sql or es_to_pg(meta or {})
                     resp_cols.append({'orig_name': orig, 'colname': colname, 'sql_type': sql_t})
-                return Response({'ok': True, 'table': table, 'columns': resp_cols})
+                # Optionally persist inferred mapping to a file named after the table
+                saved_path = None
+                try:
+                    save_to_file = bool(data.get('save_to_file'))
+                except Exception:
+                    save_to_file = False
+                if save_to_file:
+                    try:
+                        import os, re, datetime, json
+                        base_dir = os.path.dirname(__file__)
+                        out_dir = os.path.join(base_dir, 'es_mappings')
+                        os.makedirs(out_dir, exist_ok=True)
+                        safe_name = re.sub(r'[^0-9a-zA-Z_]', '_', str(table))
+                        fname = f"{safe_name}.json"
+                        file_path = os.path.join(out_dir, fname)
+                        if os.path.exists(file_path):
+                            ts = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+                            file_path = os.path.join(out_dir, f"{safe_name}_{ts}.json")
+                        with open(file_path, 'w', encoding='utf-8') as fh:
+                            json.dump({'index': index, 'table': table, 'columns': resp_cols}, fh, ensure_ascii=False, indent=2)
+                        saved_path = file_path
+                    except Exception:
+                        saved_path = None
+                resp = {'ok': True, 'table': table, 'columns': resp_cols}
+                if saved_path:
+                    resp['saved_path'] = saved_path
+                return Response(resp)
             except Exception as e:
                 return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -889,7 +1090,33 @@ def integrations_create_table_from_es(request):
                     provided_sql = meta.get('sql_type') if isinstance(meta, dict) else None
                     sql_t = provided_sql or es_to_mysql(meta or {})
                     resp_cols.append({'orig_name': orig, 'colname': colname, 'sql_type': sql_t})
-                return Response({'ok': True, 'table': table, 'columns': resp_cols})
+                # Optionally persist inferred mapping to a file named after the table
+                saved_path = None
+                try:
+                    save_to_file = bool(data.get('save_to_file'))
+                except Exception:
+                    save_to_file = False
+                if save_to_file:
+                    try:
+                        import os, re, datetime, json
+                        base_dir = os.path.dirname(__file__)
+                        out_dir = os.path.join(base_dir, 'es_mappings')
+                        os.makedirs(out_dir, exist_ok=True)
+                        safe_name = re.sub(r'[^0-9a-zA-Z_]', '_', str(table))
+                        fname = f"{safe_name}.json"
+                        file_path = os.path.join(out_dir, fname)
+                        if os.path.exists(file_path):
+                            ts = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+                            file_path = os.path.join(out_dir, f"{safe_name}_{ts}.json")
+                        with open(file_path, 'w', encoding='utf-8') as fh:
+                            json.dump({'index': index, 'table': table, 'columns': resp_cols}, fh, ensure_ascii=False, indent=2)
+                        saved_path = file_path
+                    except Exception:
+                        saved_path = None
+                resp = {'ok': True, 'table': table, 'columns': resp_cols}
+                if saved_path:
+                    resp['saved_path'] = saved_path
+                return Response(resp)
             except Exception as e:
                 return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -917,7 +1144,33 @@ def integrations_create_table_from_es(request):
                     provided_sql = meta.get('sql_type') if isinstance(meta, dict) else None
                     sql_t = provided_sql or es_to_pg(meta or {})
                     resp_cols.append({'orig_name': orig, 'colname': colname, 'sql_type': sql_t})
-                return Response({'ok': True, 'table': table, 'columns': resp_cols})
+                # Optionally persist inferred mapping to a file named after the table
+                saved_path = None
+                try:
+                    save_to_file = bool(data.get('save_to_file'))
+                except Exception:
+                    save_to_file = False
+                if save_to_file:
+                    try:
+                        import os, re, datetime, json
+                        base_dir = os.path.dirname(__file__)
+                        out_dir = os.path.join(base_dir, 'es_mappings')
+                        os.makedirs(out_dir, exist_ok=True)
+                        safe_name = re.sub(r'[^0-9a-zA-Z_]', '_', str(table))
+                        fname = f"{safe_name}.json"
+                        file_path = os.path.join(out_dir, fname)
+                        if os.path.exists(file_path):
+                            ts = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+                            file_path = os.path.join(out_dir, f"{safe_name}_{ts}.json")
+                        with open(file_path, 'w', encoding='utf-8') as fh:
+                            json.dump({'index': index, 'table': table, 'columns': resp_cols}, fh, ensure_ascii=False, indent=2)
+                        saved_path = file_path
+                    except Exception:
+                        saved_path = None
+                resp = {'ok': True, 'table': table, 'columns': resp_cols}
+                if saved_path:
+                    resp['saved_path'] = saved_path
+                return Response(resp)
             except Exception as e:
                 return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -1055,14 +1308,26 @@ def integrations_preview_es_mapping(request):
             colname = sanitize_col(name)
             cols.append((name, colname, meta))
 
-        # fetch one sample doc to show sample values (optional)
+        # fetch one or more sample docs to show sample values (optional)
         samples = {}
         try:
-            sample_url = host.rstrip('/') + f"/{index}/_search?size=1"
-            r2 = requests.post(sample_url, json={"query": {"match_all": {}}}, auth=auth, timeout=10)
+            # allow caller to specify query/size/sort
+            sample_query = data.get('query')
+            sample_size = int(data.get('size', 1)) if data.get('size') is not None else 1
+            sample_sort = data.get('sort')
+            if not sample_query:
+                sample_query = {"query": {"match_all": {}}}
+            # build url with requested size
+            sample_url = host.rstrip('/') + f"/{index}/_search?size={sample_size}"
+            # attach sort if provided
+            body = dict(sample_query) if isinstance(sample_query, dict) else sample_query
+            if sample_sort:
+                body['sort'] = sample_sort
+            r2 = requests.post(sample_url, json=body, auth=auth, timeout=10)
             r2.raise_for_status()
             hits = r2.json().get('hits', {}).get('hits', [])
             if hits:
+                # take first hit as representative (ordered by sort if provided)
                 src = hits[0].get('_source', {})
                 # helper to get nested value by dot path
                 def get_in(d, path):
@@ -1100,7 +1365,49 @@ def integrations_preview_es_mapping(request):
                 sql_t = es_to_pg(meta or {})
             out_cols.append({'orig_name': orig, 'colname': colname, 'es_type': es_t, 'sql_type': sql_t, 'sample': samples.get(orig)})
 
-        return Response({'ok': True, 'columns': out_cols})
+        # Optional: persist preview to a file if requested
+        try:
+            save_to_file = bool(data.get('save_to_file'))
+        except Exception:
+            save_to_file = False
+        filename = data.get('filename') or None
+        saved_path = None
+        if save_to_file or filename:
+            import os, json
+            # ensure directory exists under the integrations app
+            base_dir = os.path.dirname(__file__)
+            out_dir = os.path.join(base_dir, 'es_mappings')
+            try:
+                os.makedirs(out_dir, exist_ok=True)
+            except Exception:
+                out_dir = None
+
+            if out_dir:
+                # sanitize filename or generate one
+                if filename and isinstance(filename, str) and filename.strip():
+                    name = filename.strip()
+                    # remove suspicious path separators
+                    name = name.replace('..', '')
+                    name = name.replace('/', '_').replace('\\', '_')
+                    if not name.lower().endswith('.json'):
+                        name = name + '.json'
+                else:
+                    import datetime
+                    ts = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+                    name = f'preview_{index}_{ts}.json'
+
+                file_path = os.path.join(out_dir, name)
+                try:
+                    with open(file_path, 'w', encoding='utf-8') as fh:
+                        json.dump({'index': index, 'columns': out_cols}, fh, ensure_ascii=False, indent=2)
+                    saved_path = file_path
+                except Exception:
+                    saved_path = None
+
+        resp = {'ok': True, 'columns': out_cols}
+        if saved_path:
+            resp['saved_path'] = saved_path
+        return Response(resp)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
  

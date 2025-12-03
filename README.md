@@ -25,6 +25,8 @@ This project is a Security Information and Event Management (SIEM) platform buil
    ```bash
    python -m venv venv
    source venv/bin/activate
+   venv\Scripts\Activate.ps1
+
    ```
 3. Install dependencies:
    ```bash

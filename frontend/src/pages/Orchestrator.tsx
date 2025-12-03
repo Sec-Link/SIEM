@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Card, Button, List, Modal, Form, Input, Select, message, InputNumber, DatePicker } from 'antd'
-import axios, { previewEsIntegration } from '../api'
+import axios, { previewEsIntegration, integrationsDbTables, integrationsCreateTable, integrationsCreateTableFromEs, integrationsPreviewEsMapping } from '../api'
 
 // 文件级中文说明：
 // 本文件实现 Orchestrator 页面，用于管理定时任务（Task），支持：
@@ -20,6 +20,14 @@ export default function Orchestrator(){
   const [editingTask, setEditingTask] = useState<any | null>(null)
   const [form] = Form.useForm()
   const [runsModalTask, setRunsModalTask] = useState<any | null>(null)
+  const [availableTables, setAvailableTables] = useState<string[]>([])
+  const [showCreateTableModal, setShowCreateTableModal] = useState(false)
+  const [creatingTableName, setCreatingTableName] = useState('es_imports')
+  const [previewColumns, setPreviewColumns] = useState<any[] | null>(null)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [editedColumns, setEditedColumns] = useState<any[] | null>(null)
+  const PG_TYPE_OPTIONS = ['text','integer','bigint','smallint','real','double precision','numeric','boolean','timestamptz','timestamp','date','jsonb','json']
+  const MYSQL_TYPE_OPTIONS = ['TEXT','INT','BIGINT','SMALLINT','DOUBLE','TINYINT(1)','DATETIME','JSON','VARCHAR(255)']
 
   // compute ISO timestamps for lower and upper bounds based on absolute or relative selectors
   // 说明：将表单中混合的绝对/相对时间选择解析为 ES 可接受的范围
@@ -49,12 +57,13 @@ export default function Orchestrator(){
 
     // if no absolute from, consider relative
     if(!tsFrom){
-      const rel = vals.timestamp_relative
+      // prefer explicit timestamp_relative, fallback to time_selector (which may be 'custom_relative')
+      const rel = vals.timestamp_relative || vals.time_selector
       if(rel){
         let value: number | null = null
         let unit: string | null = null
         if(typeof rel === 'string'){
-          if(rel === 'custom'){
+          if(rel === 'custom' || rel === 'custom_relative'){
             if(vals.timestamp_relative_custom_value && vals.timestamp_relative_custom_unit){
               value = Number(vals.timestamp_relative_custom_value)
               unit = vals.timestamp_relative_custom_unit
@@ -68,14 +77,9 @@ export default function Orchestrator(){
           unit = rel.unit
         }
 
-        // 如果解析出了相对时间的 value 与 unit，则计算 from=now-ms, to='now'
+        // 如果解析出了相对时间的 value 与 unit，则构造 ES 相对时间字符串 like 'now-10h', to='now'
         if(value && unit){
-          const now = Date.now()
-          let ms = 0
-          if(unit === 'm') ms = value * 60 * 1000
-          else if(unit === 'h') ms = value * 60 * 60 * 1000
-          else if(unit === 'd') ms = value * 24 * 60 * 60 * 1000
-          if(ms > 0) tsFrom = new Date(now - ms).toISOString()
+          tsFrom = `now-${value}${unit}`
           tsTo = 'now'
         }
       }
@@ -109,6 +113,7 @@ export default function Orchestrator(){
     payload.config.sync = 'es_to_db'
     payload.config.source_integration = v.source_integration
     payload.config.dest_integration = v.dest_integration
+    if(v.table) payload.config.table = v.table
     payload.config.index = v.index
     payload.config.limit = Number(v.limit) || 1000
     // if user supplied a JSON query in config textarea, try parse it
@@ -159,6 +164,60 @@ export default function Orchestrator(){
       setEditingTask(null)
       fetch()
       fetchRuns()
+    }catch(e:any){ message.error(String(e)) }
+  }
+
+  const fetchTablesFromIntegration = async () => {
+    try{
+      const v = form.getFieldsValue()
+      if(!v.dest_integration) return
+      const payload: any = { integration: v.dest_integration }
+      const res = await integrationsDbTables(payload)
+      if(res && res.tables) setAvailableTables(res.tables)
+      else setAvailableTables([])
+    }catch(e:any){ message.warning('Could not fetch tables: ' + (e.message || String(e))) }
+  }
+
+  const handleCreateTable = async () => {
+    try{
+      const v = form.getFieldsValue()
+      const payload: any = { table: creatingTableName }
+      if(v.dest_integration) payload.integration = v.dest_integration
+      const res = await integrationsCreateTable(payload)
+      if(res && res.ok){
+        message.success('Table created: ' + res.table)
+        try{ await fetchTablesFromIntegration() }catch(_){ }
+        form.setFieldsValue({ table: res.table })
+        setShowCreateTableModal(false)
+      }else{
+        message.error('Create table failed: ' + JSON.stringify(res))
+      }
+    }catch(e:any){ message.error(String(e)) }
+  }
+
+  const createTableFromEs = async (esIntegrationId?: string, indexName?: string) => {
+    try{
+      const v = form.getFieldsValue()
+      // default to New Task form values if args not provided
+      if(!esIntegrationId) esIntegrationId = v.source_integration
+      if(!indexName) indexName = v.index
+      const payload: any = { table: creatingTableName }
+      if(esIntegrationId) payload.es_integration = esIntegrationId
+      if(indexName) payload.index = indexName
+      if(v.dest_integration) payload.dest_integration = v.dest_integration
+      payload.save_to_file = true
+      if(editedColumns && editedColumns.length > 0){ payload.columns = editedColumns.map((c:any)=>({ orig_name: c.orig_name, colname: c.colname, sql_type: c.sql_type })) }
+      const res = await integrationsCreateTableFromEs(payload)
+      if(res && res.ok){
+        if(res.saved_path) message.success('Mapping saved to: ' + res.saved_path)
+        message.success('Table created from ES mapping: ' + res.table)
+        try{ await fetchTablesFromIntegration() }catch(_){ }
+        form.setFieldsValue({ table: res.table })
+        if(res.columns && res.columns.length){ setEditedColumns(res.columns) }
+        setShowCreateTableModal(false)
+      }else{
+        message.error('Create table failed: ' + JSON.stringify(res))
+      }
     }catch(e:any){ message.error(String(e)) }
   }
 
@@ -232,6 +291,117 @@ export default function Orchestrator(){
         )} />
       </Modal>
 
+      <Modal open={showCreateTableModal} title="Create table" onCancel={()=>setShowCreateTableModal(false)} footer={(
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <Button onClick={()=>setShowCreateTableModal(false)}>Cancel</Button>
+              <Button onClick={async ()=>{
+                try{
+                  // use New Task form values for integration/index/time range
+                  const v = form.getFieldsValue()
+                  const es_integration = v.source_integration
+                  const index_name = v.index
+                  if(!es_integration || !index_name){ message.warning('Select ES integration and index to preview'); return }
+                  const payload:any = { es_integration: es_integration, index: index_name }
+                  if(v.dest_integration) payload.dest_integration = v.dest_integration
+                  // build optional time range query from form
+                  const range = computeTsRange(v)
+                  if(v.timestamp_field && range.from){
+                    // send a range query and request the latest single doc by sorting descending
+                    payload.query = { "query": { "range": { [v.timestamp_field]: { "gte": range.from, "lte": range.to || 'now' } } } }
+                    payload.sort = [ { [v.timestamp_field]: { order: 'desc' } } ]
+                    payload.size = 1
+                  } else {
+                    // default: fetch latest single doc
+                    if(v.timestamp_field){
+                      payload.sort = [ { [v.timestamp_field]: { order: 'desc' } } ]
+                    }
+                    payload.size = 1
+                  }
+                  // request preview and ask backend to save file
+                  const suggestedName = `preview_${es_integration || 'es'}_${(index_name || 'index')}.json`
+                  payload.save_to_file = true
+                  payload.filename = suggestedName
+                  const res = await integrationsPreviewEsMapping(payload)
+                  if(res && res.ok){
+                    setPreviewColumns(res.columns || [])
+                    setEditedColumns((res.columns || []).map((c:any)=> ({ ...c })))
+                    setShowPreviewModal(true)
+                    if(res.saved_path){ message.success('Preview saved to: ' + res.saved_path) }
+                  }else{
+                    message.error('Preview failed: ' + JSON.stringify(res))
+                  }
+                }catch(e:any){ message.error(String(e)) }
+              }}>Preview Schema</Button>
+              <Button onClick={async ()=>{ await createTableFromEs() }}>Create from ES mapping</Button>
+          <Button type="primary" onClick={handleCreateTable}>Create</Button>
+        </div>
+      )}>
+        <Form layout="vertical">
+          <Form.Item label="Table name">
+            <Input value={creatingTableName} onChange={e=>setCreatingTableName(e.target.value)} />
+          </Form.Item>
+          <Form.Item>
+            <div style={{ fontSize: 12, color: '#666', marginTop: 6 }}>Create from the ES index selected in the New Task form (Source Integration + Index + Time range).</div>
+          </Form.Item>
+          <div style={{ fontSize: 12, color: '#666' }}>Creates a default table with columns: id, es_id, data, created_at (or more from mapping)</div>
+        </Form>
+      </Modal>
+
+      <Modal open={showPreviewModal} title="Preview schema from ES mapping" onCancel={()=>{ setShowPreviewModal(false); setPreviewColumns(null) }} footer={null} width={700}>
+        {editedColumns && editedColumns.length > 0 ? (
+          <div style={{ maxHeight: 400, overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: 6 }}>Orig Name</th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: 6 }}>Column</th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: 6 }}>ES Type</th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: 6 }}>SQL Type</th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: 6 }}>Sample</th>
+                </tr>
+              </thead>
+              <tbody>
+                {editedColumns.map((c:any,i:number)=> (
+                  <tr key={i}>
+                    <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>{c.orig_name}</td>
+                    <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>
+                      <Input value={c.colname} onChange={(e)=>{
+                        const copy = editedColumns.slice(); copy[i] = { ...copy[i], colname: e.target.value }; setEditedColumns(copy)
+                      }} />
+                    </td>
+                    <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>{String(c.es_type || '')}</td>
+                    <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>
+                      {(() => {
+                        const targetType = form.getFieldValue('dest_integration')
+                        const options = targetType === 'mysql' || targetType === 'mysql' ? MYSQL_TYPE_OPTIONS : PG_TYPE_OPTIONS
+                        const value = c.sql_type || (options.length ? options[0] : '')
+                        return (
+                          <Select value={value} style={{ minWidth: 180 }} onChange={(val:any)=>{ const copy = editedColumns.slice(); copy[i] = { ...copy[i], sql_type: val }; setEditedColumns(copy) }}>
+                            {options.map(op => (<Select.Option key={op} value={op}>{op}</Select.Option>))}
+                          </Select>
+                        )
+                      })()}
+                    </td>
+                    <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>{String(c.sample ?? '')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div>No columns inferred from mapping.</div>
+        )}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button onClick={()=>{ setShowPreviewModal(false) }}>Close</Button>
+            <Button type="primary" onClick={()=>{
+              setPreviewColumns(editedColumns)
+              setShowPreviewModal(false)
+            }}>Save Edits</Button>
+          </div>
+        </div>
+      </Modal>
+
       <Modal open={showModal} onCancel={()=>setShowModal(false)} onOk={save} title="New Task">
         <Form form={form} layout="vertical" initialValues={{ schedule: '0 0 * * *' }}>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
@@ -248,12 +418,34 @@ export default function Orchestrator(){
                 try{
                   const vals = form.getFieldsValue()
                   let q = null
-                  // compute ISO timestamp range from absolute or relative inputs
+                  // compute timestamp range from absolute or relative inputs
                   const range = computeTsRange(vals)
                   if(vals.timestamp_field && range.from){
                     q = { "query": { "range": { [vals.timestamp_field]: { "gte": range.from, "lte": range.to || 'now' } } } }
+                  } else if(vals.timestamp_field){
+                    // fallback: sometimes preset selection lives in time_selector or timestamp_relative
+                    const sel = vals.time_selector || vals.timestamp_relative
+                    let tsFrom: string | null = null
+                    let tsTo: string | null = null
+                    if(sel){
+                      if(typeof sel === 'string'){
+                        if(sel === 'custom' || sel === 'custom_relative' || sel === 'custom-relative'){
+                          // read custom fields
+                          if(vals.timestamp_relative_custom_value && vals.timestamp_relative_custom_unit){
+                            tsFrom = `now-${vals.timestamp_relative_custom_value}${vals.timestamp_relative_custom_unit}`
+                            tsTo = 'now'
+                          }
+                        }else{
+                          const m = (''+sel).match(/^(\d+)([mhd])$/)
+                          if(m){ tsFrom = `now-${m[1]}${m[2]}`; tsTo = 'now' }
+                        }
+                      }else if(typeof sel === 'object' && sel !== null){
+                        if(sel.value && sel.unit){ tsFrom = `now-${sel.value}${sel.unit}`; tsTo = 'now' }
+                      }
+                    }
+                    if(tsFrom){ q = { "query": { "range": { [vals.timestamp_field]: { "gte": tsFrom, "lte": tsTo || 'now' } } } } }
                   }
-                  const res = await previewEsIntegration({ integration_id: vals.source_integration, index: vals.index, size: 10, query: q })
+                  const res = await previewEsIntegration({ integration_id: vals.source_integration, index: vals.index, size: Number(vals.limit) || 10, query: q })
                   if(res.error) throw new Error(res.error)
                   Modal.info({ title: 'Data preview', width: 800, content: (<pre style={{ whiteSpace: 'pre-wrap', maxHeight: 400, overflow: 'auto' }}>{JSON.stringify(res.rows, null, 2)}</pre>) })
                 }catch(e:any){ message.error(String(e)) }
@@ -321,8 +513,18 @@ export default function Orchestrator(){
               {integrations.filter(i=>['postgresql','mysql'].includes(i.type)).map(it => (<Select.Option key={it.id} value={it.id}>{it.name}</Select.Option>))}
             </Select>
           </Form.Item>
+          <Form.Item label="Destination table (optional)">
+            <Input.Group compact>
+              <Form.Item name="table" noStyle>
+                <Select style={{ minWidth: 240 }} placeholder="Select existing table or leave empty">
+                  {availableTables.map(tb => (<Select.Option key={tb} value={tb}>{tb}</Select.Option>))}
+                </Select>
+              </Form.Item>
+              <Button onClick={()=>setShowCreateTableModal(true)}>Create table</Button>
+              <Button onClick={()=>fetchTablesFromIntegration()} type="default">Refresh</Button>
+            </Input.Group>
+          </Form.Item>
           <Form.Item name="limit" label="Limit"><InputNumber style={{ width: '100%' }} min={1} /></Form.Item>
-          <Form.Item name="config" label="Config (JSON)"><Input.TextArea rows={6} placeholder='{"sync":"es_to_db"}' /></Form.Item>
         </Form>
       </Modal>
     </div>

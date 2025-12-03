@@ -218,6 +218,12 @@ const Integrations: React.FC = () =>{
       }
       if(esIntegrationId) payload.es_integration = esIntegrationId
       if(indexName) payload.index = indexName
+      // ask backend to persist mapping file for this create-from-es action
+      try{
+        const suggestedName = `create_from_es_${esIntegrationId || 'es'}_${(indexName || 'index')}.json`
+        payload.save_to_file = true
+        payload.filename = suggestedName
+      }catch(_){ }
       // include edited columns if the user previewed and edited them
       // 若用户在预览 modal 编辑了列名/类型，则把这些编辑后的列 metadata 发送给后端以便创建带列定义的表
       if(editedColumns && editedColumns.length > 0){
@@ -227,6 +233,9 @@ const Integrations: React.FC = () =>{
       if(editingIndex !== null){ payload.integration = items[editingIndex].id }
       const res = await integrationsCreateTableFromEs(payload)
       if(res && res.ok){
+          if(res.saved_path){
+            message.success('Mapping saved to: ' + res.saved_path)
+          }
         message.success('Table created from ES mapping: ' + res.table)
         try{
           const tablesRes = await integrationsDbTables(payload)
@@ -417,18 +426,6 @@ const Integrations: React.FC = () =>{
                       <Form.Item name="password" label="Password"><Input.Password /></Form.Item>
                       <Form.Item name="dbname" label="Database"><Input onBlur={()=>fetchTablesFromForm()} /></Form.Item>
                       <Form.Item name="django_db" label="Django DB alias (optional)"><Input placeholder="e.g. default" onBlur={()=>fetchTablesFromForm()} /></Form.Item>
-
-                      <Form.Item label="Destination table (optional)">
-                        <Space>
-                          <Form.Item noStyle name="table">
-                            <Select style={{ minWidth: 240 }} placeholder="Select existing table or leave empty">
-                              {availableTables.map(tb => (<Select.Option key={tb} value={tb}>{tb}</Select.Option>))}
-                            </Select>
-                          </Form.Item>
-                          <Button onClick={()=>setShowCreateTableModal(true)}>Create table</Button>
-                          <Button onClick={()=>fetchTablesFromForm()} type="default">Refresh</Button>
-                        </Space>
-                      </Form.Item>
                     </>
                   )}
                 </>
@@ -445,110 +442,7 @@ const Integrations: React.FC = () =>{
         </Form>
       </Modal>
 
-      <Modal open={showCreateTableModal} title="Create table" onCancel={()=>setShowCreateTableModal(false)} footer={(
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <Button onClick={()=>setShowCreateTableModal(false)}>Cancel</Button>
-          <Button onClick={async ()=>{
-            try{
-              const v = form.getFieldsValue()
-              if(!modalEsIntegrationId || !modalIndexName){ message.warning('Select ES integration and index to preview'); return }
-              const payload:any = { es_integration: modalEsIntegrationId, index: modalIndexName }
-              payload.db_type = v.type === 'postgresql' ? 'postgres' : 'mysql'
-              if(v.conn_str) payload.conn_str = v.conn_str
-              else{
-                payload.host = v.host || ''
-                payload.user = v.user || v.username || ''
-                payload.password = v.password || ''
-                payload.database = v.dbname || v.database || ''
-                payload.port = v.port || ''
-                payload.django_db = v.django_db || undefined
-              }
-              const res = await integrationsPreviewEsMapping(payload)
-              if(res && res.ok){
-                setPreviewColumns(res.columns || [])
-                setEditedColumns((res.columns || []).map((c:any)=> ({ ...c })))
-                setShowPreviewModal(true)
-              }else{
-                message.error('Preview failed: ' + JSON.stringify(res))
-              }
-            }catch(e:any){ message.error(String(e)) }
-          }}>Preview Schema</Button>
-          <Button onClick={async ()=>{ await createTableFromEs(modalEsIntegrationId, modalIndexName) }}>Create from ES mapping</Button>
-          <Button type="primary" onClick={handleCreateTable}>Create</Button>
-        </div>
-      )}>
-        <Form layout="vertical">
-          <Form.Item label="Table name">
-            <Input value={creatingTableName} onChange={e=>setCreatingTableName(e.target.value)} />
-          </Form.Item>
-          <Form.Item label="Create from ES index (optional)">
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <Select id="create-es-select" value={modalEsIntegrationId} onChange={(v:any)=>setModalEsIntegrationId(v)} style={{ minWidth: 220 }} placeholder="Select ES integration" allowClear>
-                {items.filter(i=>i.type === 'elasticsearch').map(i=> (<Select.Option key={i.id} value={i.id}>{i.name || i.config?.host || i.id}</Select.Option>))}
-              </Select>
-              <Input id="create-es-index" value={modalIndexName} onChange={(e)=>setModalIndexName(e.target.value)} placeholder="Index name" style={{ minWidth: 220 }} />
-            </div>
-            <div style={{ fontSize: 12, color: '#666', marginTop: 6 }}>If provided, the ES index mapping will be used to build table columns where possible.</div>
-          </Form.Item>
-          <div style={{ fontSize: 12, color: '#666' }}>Creates a default table with columns: id, es_id, data, created_at (or more from mapping)</div>
-        </Form>
-      </Modal>
-
-      <Modal open={showPreviewModal} title="Preview schema from ES mapping" onCancel={()=>{ setShowPreviewModal(false); setPreviewColumns(null) }} footer={null} width={700}>
-        {editedColumns && editedColumns.length > 0 ? (
-          <div style={{ maxHeight: 400, overflow: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: 6 }}>Orig Name</th>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: 6 }}>Column</th>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: 6 }}>ES Type</th>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: 6 }}>SQL Type</th>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #eee', padding: 6 }}>Sample</th>
-                </tr>
-              </thead>
-              <tbody>
-                {editedColumns.map((c:any,i:number)=> (
-                  <tr key={i}>
-                    <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>{c.orig_name}</td>
-                    <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>
-                      <Input value={c.colname} onChange={(e)=>{
-                        const copy = editedColumns.slice(); copy[i] = { ...copy[i], colname: e.target.value }; setEditedColumns(copy)
-                      }} />
-                    </td>
-                    <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>{String(c.es_type || '')}</td>
-                    <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>
-                      {(() => {
-                        const targetType = form.getFieldValue('type')
-                        const options = targetType === 'mysql' || targetType === 'mysql' ? MYSQL_TYPE_OPTIONS : PG_TYPE_OPTIONS
-                        const value = c.sql_type || (options.length ? options[0] : '')
-                        return (
-                          <Select value={value} style={{ minWidth: 180 }} onChange={(val:any)=>{ const copy = editedColumns.slice(); copy[i] = { ...copy[i], sql_type: val }; setEditedColumns(copy) }}>
-                            {options.map(op => (<Select.Option key={op} value={op}>{op}</Select.Option>))}
-                          </Select>
-                        )
-                      })()}
-                    </td>
-                    <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>{String(c.sample ?? '')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div>No columns inferred from mapping.</div>
-        )}
-        <div style={{ marginTop: 12 }}>
-          <Space>
-            <Button onClick={()=>{ setShowPreviewModal(false) }}>Close</Button>
-            <Button type="primary" onClick={()=>{
-              // copy editedColumns back into previewColumns and close modal
-              setPreviewColumns(editedColumns)
-              setShowPreviewModal(false)
-            }}>Save Edits</Button>
-          </Space>
-        </div>
-      </Modal>
+      
     </div>
   )
 }

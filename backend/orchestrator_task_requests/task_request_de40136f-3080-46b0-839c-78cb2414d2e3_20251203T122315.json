@@ -1,0 +1,30 @@
+{
+  "logged_at": "2025-12-03T12:23:15.106842+00:00",
+  "user": "qk",
+  "task_id": "de40136f-3080-46b0-839c-78cb2414d2e3",
+  "task_name": "3",
+  "request_body": {
+    "name": "3",
+    "schedule": "*/1 * * * *",
+    "task_type": "es_to_db",
+    "config": {
+      "sync": "es_to_db",
+      "source_integration": "fa483942-f602-4eb4-bcea-a7ab50d08e11",
+      "dest_integration": "3169838a-f76b-422f-b6ef-409ee59529e0",
+      "table": "dev102",
+      "index": "alerts",
+      "limit": 10,
+      "timestamp_field": "date",
+      "query": {
+        "query": {
+          "range": {
+            "date": {
+              "gte": "now-6h",
+              "lte": "now"
+            }
+          }
+        }
+      }
+    }
+  }
+}

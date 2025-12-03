@@ -1,0 +1,606 @@
+{
+  "index": "alerts",
+  "mapping_columns": [
+    {
+      "orig_name": "@timestamp",
+      "colname": "_timestamp",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "alert_id",
+      "colname": "alert_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "category",
+      "colname": "category",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "date",
+      "colname": "date",
+      "sql_type": "timestamptz"
+    },
+    {
+      "orig_name": "description",
+      "colname": "description",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "destination",
+      "colname": "destination",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "dst_host",
+      "colname": "dst_host",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "event_id",
+      "colname": "event_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "firstactivitytime",
+      "colname": "firstactivitytime",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "host",
+      "colname": "host",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "message",
+      "colname": "message",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "observer_ip",
+      "colname": "observer_ip",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "program",
+      "colname": "program",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "raw",
+      "colname": "raw",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "raw_timestamp",
+      "colname": "raw_timestamp",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "references",
+      "colname": "references",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "risk_object",
+      "colname": "risk_object",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "risk_score",
+      "colname": "risk_score",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "rule_id",
+      "colname": "rule_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "rule_name",
+      "colname": "rule_name",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "severity",
+      "colname": "severity",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "source_ip",
+      "colname": "source_ip",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "src_ip",
+      "colname": "src_ip",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "tactic_id",
+      "colname": "tactic_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "tactic_name",
+      "colname": "tactic_name",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "tags",
+      "colname": "tags",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "technique_id",
+      "colname": "technique_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "technique_name",
+      "colname": "technique_name",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "tenant_id",
+      "colname": "tenant_id",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "timestamp",
+      "colname": "timestamp",
+      "sql_type": "timestamptz"
+    },
+    {
+      "orig_name": "title",
+      "colname": "title",
+      "sql_type": "text"
+    },
+    {
+      "orig_name": "url",
+      "colname": "url",
+      "sql_type": "text"
+    }
+  ],
+  "sample_docs": [
+    {
+      "date": "2025-12-02T15:49:21.519Z",
+      "alert_id": "06380dc40b62774ed110f2a53de883b7b82a07ca6abe0846d0184e8b69faa58a",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "104.23.172.23",
+      "firstactivitytime": "2025-12-02T23:48:44+08:00",
+      "observer_ip": "104.23.172.23",
+      "destination": "seclink.info:443",
+      "raw": "{\"src_city\":\"北荷兰省阿姆斯特丹\",\"src_ip\":\"104.23.172.23\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4033\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:48:44\"}"
+    },
+    {
+      "date": "2025-12-02T15:49:21.493Z",
+      "alert_id": "963377cac3cec7402c59b20aad02510c91072a798e054686fad2a151f3a01eea",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "104.23.172.23",
+      "firstactivitytime": "2025-12-02T23:48:26+08:00",
+      "observer_ip": "104.23.172.23",
+      "destination": "seclink.info:443",
+      "raw": "{\"src_city\":\"北荷兰省阿姆斯特丹\",\"src_ip\":\"104.23.172.23\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4032\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:48:26\"}"
+    },
+    {
+      "date": "2025-12-02T15:49:21.506Z",
+      "alert_id": "87515cca3668bc17129a98b47a9e242378490d72ee0d0bbdb12d865ea3f45215",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "104.23.172.23",
+      "firstactivitytime": "2025-12-02T23:48:43+08:00",
+      "observer_ip": "104.23.172.23",
+      "destination": "seclink.info:443",
+      "raw": "{\"src_city\":\"北荷兰省阿姆斯特丹\",\"src_ip\":\"104.23.172.23\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4034\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:48:43\"}"
+    },
+    {
+      "date": "2025-12-02T15:18:21.314Z",
+      "alert_id": "eb4029d38e90557d2d573646877726e347fbefe598c3a884b34ac2270081d01c",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "172.71.120.104",
+      "firstactivitytime": "2025-12-02T23:17:35+08:00",
+      "observer_ip": "172.71.120.104",
+      "destination": "seclink.info:443",
+      "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"172.71.120.104\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4031\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:17:35\"}"
+    },
+    {
+      "date": "2025-12-03T04:43:26.722Z",
+      "alert_id": "c0e423b2c323823cd338446957b71b9366736eca9c60348b7a706e9799e55cd3",
+      "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+      "title": "waf alert",
+      "description": "waf alert",
+      "severity": "low",
+      "risk_score": "21",
+      "references": "",
+      "tags": "",
+      "category": "External Attack",
+      "source_ip": "172.71.110.210",
+      "firstactivitytime": "2025-12-03T12:43:10+08:00",
+      "observer_ip": "172.71.110.210",
+      "destination": "seclink.info:443",
+      "raw": "{\"src_city\":\"首尔特别市首尔\",\"src_ip\":\"172.71.110.210\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4035\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 03 12:43:10\"}"
+    },
+    {
+      "date": "2025-12-03T10:38:08.443Z",
+      "alert_id": "33309782ad90adcf19eea647152732250d18c9b39053cc8e63cbf56fe4633d5c",
+      "rule_id": "a6f2a6dd-b24d-43a2-ad7d-4914f7af736a",
+      "title": "AWS Root Login Without MFA [Duplicate]",
+      "description": "Identifies attempts to login to AWS as the root user without using multi-factor authentication (MFA). Amazon AWS best practices indicate that the root user should be protected by MFA.",
+      "severity": "high",
+      "risk_score": "73",
+      "references": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user.html",
+      "tags": "Domain: Cloud,Data Source: AWS,Data Source: Amazon Web Services,Data Source: AWS Route53,Use Case: Identity and Access Audit,Resources: Investigation Guide,Tactic: Privilege Escalation",
+      "category": "External Attack",
+      "source_ip": "129.227.235.35",
+      "firstactivitytime": "2025-12-03T10:31:28.983Z",
+      "observer_ip": "",
+      "destination": "235103096742",
+      "risk_object": "",
+      "tactic_id": "TA0004",
+      "tactic_name": "Privilege Escalation",
+      "technique_id": "T1078",
+      "technique_name": "Valid Accounts",
+      "raw": ""
+    }
+  ],
+  "extraction": [
+    {
+      "es_id": "qBDB35oBQUHKddHoDzkX",
+      "mapped": {
+        "_timestamp": null,
+        "alert_id": "06380dc40b62774ed110f2a53de883b7b82a07ca6abe0846d0184e8b69faa58a",
+        "category": "External Attack",
+        "date": "2025-12-02T15:49:21.519Z",
+        "description": "waf alert",
+        "destination": "seclink.info:443",
+        "dst_host": null,
+        "event_id": null,
+        "firstactivitytime": "2025-12-02T23:48:44+08:00",
+        "host": null,
+        "message": null,
+        "observer_ip": "104.23.172.23",
+        "program": null,
+        "raw": "{\"src_city\":\"北荷兰省阿姆斯特丹\",\"src_ip\":\"104.23.172.23\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4033\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:48:44\"}",
+        "raw_timestamp": null,
+        "references": "",
+        "risk_object": null,
+        "risk_score": "21",
+        "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+        "rule_name": null,
+        "severity": "low",
+        "source_ip": "104.23.172.23",
+        "src_ip": null,
+        "tactic_id": null,
+        "tactic_name": null,
+        "tags": "",
+        "technique_id": null,
+        "technique_name": null,
+        "tenant_id": null,
+        "timestamp": null,
+        "title": "waf alert",
+        "url": null
+      },
+      "raw": {
+        "date": "2025-12-02T15:49:21.519Z",
+        "alert_id": "06380dc40b62774ed110f2a53de883b7b82a07ca6abe0846d0184e8b69faa58a",
+        "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+        "title": "waf alert",
+        "description": "waf alert",
+        "severity": "low",
+        "risk_score": "21",
+        "references": "",
+        "tags": "",
+        "category": "External Attack",
+        "source_ip": "104.23.172.23",
+        "firstactivitytime": "2025-12-02T23:48:44+08:00",
+        "observer_ip": "104.23.172.23",
+        "destination": "seclink.info:443",
+        "raw": "{\"src_city\":\"北荷兰省阿姆斯特丹\",\"src_ip\":\"104.23.172.23\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4033\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:48:44\"}"
+      }
+    },
+    {
+      "es_id": "qhDB35oBQUHKddHoDzkh",
+      "mapped": {
+        "_timestamp": null,
+        "alert_id": "963377cac3cec7402c59b20aad02510c91072a798e054686fad2a151f3a01eea",
+        "category": "External Attack",
+        "date": "2025-12-02T15:49:21.493Z",
+        "description": "waf alert",
+        "destination": "seclink.info:443",
+        "dst_host": null,
+        "event_id": null,
+        "firstactivitytime": "2025-12-02T23:48:26+08:00",
+        "host": null,
+        "message": null,
+        "observer_ip": "104.23.172.23",
+        "program": null,
+        "raw": "{\"src_city\":\"北荷兰省阿姆斯特丹\",\"src_ip\":\"104.23.172.23\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4032\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:48:26\"}",
+        "raw_timestamp": null,
+        "references": "",
+        "risk_object": null,
+        "risk_score": "21",
+        "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+        "rule_name": null,
+        "severity": "low",
+        "source_ip": "104.23.172.23",
+        "src_ip": null,
+        "tactic_id": null,
+        "tactic_name": null,
+        "tags": "",
+        "technique_id": null,
+        "technique_name": null,
+        "tenant_id": null,
+        "timestamp": null,
+        "title": "waf alert",
+        "url": null
+      },
+      "raw": {
+        "date": "2025-12-02T15:49:21.493Z",
+        "alert_id": "963377cac3cec7402c59b20aad02510c91072a798e054686fad2a151f3a01eea",
+        "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+        "title": "waf alert",
+        "description": "waf alert",
+        "severity": "low",
+        "risk_score": "21",
+        "references": "",
+        "tags": "",
+        "category": "External Attack",
+        "source_ip": "104.23.172.23",
+        "firstactivitytime": "2025-12-02T23:48:26+08:00",
+        "observer_ip": "104.23.172.23",
+        "destination": "seclink.info:443",
+        "raw": "{\"src_city\":\"北荷兰省阿姆斯特丹\",\"src_ip\":\"104.23.172.23\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4032\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:48:26\"}"
+      }
+    },
+    {
+      "es_id": "qRDB35oBQUHKddHoDzkd",
+      "mapped": {
+        "_timestamp": null,
+        "alert_id": "87515cca3668bc17129a98b47a9e242378490d72ee0d0bbdb12d865ea3f45215",
+        "category": "External Attack",
+        "date": "2025-12-02T15:49:21.506Z",
+        "description": "waf alert",
+        "destination": "seclink.info:443",
+        "dst_host": null,
+        "event_id": null,
+        "firstactivitytime": "2025-12-02T23:48:43+08:00",
+        "host": null,
+        "message": null,
+        "observer_ip": "104.23.172.23",
+        "program": null,
+        "raw": "{\"src_city\":\"北荷兰省阿姆斯特丹\",\"src_ip\":\"104.23.172.23\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4034\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:48:43\"}",
+        "raw_timestamp": null,
+        "references": "",
+        "risk_object": null,
+        "risk_score": "21",
+        "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+        "rule_name": null,
+        "severity": "low",
+        "source_ip": "104.23.172.23",
+        "src_ip": null,
+        "tactic_id": null,
+        "tactic_name": null,
+        "tags": "",
+        "technique_id": null,
+        "technique_name": null,
+        "tenant_id": null,
+        "timestamp": null,
+        "title": "waf alert",
+        "url": null
+      },
+      "raw": {
+        "date": "2025-12-02T15:49:21.506Z",
+        "alert_id": "87515cca3668bc17129a98b47a9e242378490d72ee0d0bbdb12d865ea3f45215",
+        "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+        "title": "waf alert",
+        "description": "waf alert",
+        "severity": "low",
+        "risk_score": "21",
+        "references": "",
+        "tags": "",
+        "category": "External Attack",
+        "source_ip": "104.23.172.23",
+        "firstactivitytime": "2025-12-02T23:48:43+08:00",
+        "observer_ip": "104.23.172.23",
+        "destination": "seclink.info:443",
+        "raw": "{\"src_city\":\"北荷兰省阿姆斯特丹\",\"src_ip\":\"104.23.172.23\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4034\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:48:43\"}"
+      }
+    },
+    {
+      "es_id": "Cw-k35oBQUHKddHoqUJs",
+      "mapped": {
+        "_timestamp": null,
+        "alert_id": "eb4029d38e90557d2d573646877726e347fbefe598c3a884b34ac2270081d01c",
+        "category": "External Attack",
+        "date": "2025-12-02T15:18:21.314Z",
+        "description": "waf alert",
+        "destination": "seclink.info:443",
+        "dst_host": null,
+        "event_id": null,
+        "firstactivitytime": "2025-12-02T23:17:35+08:00",
+        "host": null,
+        "message": null,
+        "observer_ip": "172.71.120.104",
+        "program": null,
+        "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"172.71.120.104\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4031\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:17:35\"}",
+        "raw_timestamp": null,
+        "references": "",
+        "risk_object": null,
+        "risk_score": "21",
+        "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+        "rule_name": null,
+        "severity": "low",
+        "source_ip": "172.71.120.104",
+        "src_ip": null,
+        "tactic_id": null,
+        "tactic_name": null,
+        "tags": "",
+        "technique_id": null,
+        "technique_name": null,
+        "tenant_id": null,
+        "timestamp": null,
+        "title": "waf alert",
+        "url": null
+      },
+      "raw": {
+        "date": "2025-12-02T15:18:21.314Z",
+        "alert_id": "eb4029d38e90557d2d573646877726e347fbefe598c3a884b34ac2270081d01c",
+        "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+        "title": "waf alert",
+        "description": "waf alert",
+        "severity": "low",
+        "risk_score": "21",
+        "references": "",
+        "tags": "",
+        "category": "External Attack",
+        "source_ip": "172.71.120.104",
+        "firstactivitytime": "2025-12-02T23:17:35+08:00",
+        "observer_ip": "172.71.120.104",
+        "destination": "seclink.info:443",
+        "raw": "{\"src_city\":\"安大略省多伦多\",\"src_ip\":\"172.71.120.104\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4031\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 02 23:17:35\"}"
+      }
+    },
+    {
+      "es_id": "dSmF4poBQUHKddHowZiD",
+      "mapped": {
+        "_timestamp": null,
+        "alert_id": "c0e423b2c323823cd338446957b71b9366736eca9c60348b7a706e9799e55cd3",
+        "category": "External Attack",
+        "date": "2025-12-03T04:43:26.722Z",
+        "description": "waf alert",
+        "destination": "seclink.info:443",
+        "dst_host": null,
+        "event_id": null,
+        "firstactivitytime": "2025-12-03T12:43:10+08:00",
+        "host": null,
+        "message": null,
+        "observer_ip": "172.71.110.210",
+        "program": null,
+        "raw": "{\"src_city\":\"首尔特别市首尔\",\"src_ip\":\"172.71.110.210\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4035\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 03 12:43:10\"}",
+        "raw_timestamp": null,
+        "references": "",
+        "risk_object": null,
+        "risk_score": "21",
+        "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+        "rule_name": null,
+        "severity": "low",
+        "source_ip": "172.71.110.210",
+        "src_ip": null,
+        "tactic_id": null,
+        "tactic_name": null,
+        "tags": "",
+        "technique_id": null,
+        "technique_name": null,
+        "tenant_id": null,
+        "timestamp": null,
+        "title": "waf alert",
+        "url": null
+      },
+      "raw": {
+        "date": "2025-12-03T04:43:26.722Z",
+        "alert_id": "c0e423b2c323823cd338446957b71b9366736eca9c60348b7a706e9799e55cd3",
+        "rule_id": "beb3d444-e8f2-4251-9457-804ed345a28e",
+        "title": "waf alert",
+        "description": "waf alert",
+        "severity": "low",
+        "risk_score": "21",
+        "references": "",
+        "tags": "",
+        "category": "External Attack",
+        "source_ip": "172.71.110.210",
+        "firstactivitytime": "2025-12-03T12:43:10+08:00",
+        "observer_ip": "172.71.110.210",
+        "destination": "seclink.info:443",
+        "raw": "{\"src_city\":\"首尔特别市首尔\",\"src_ip\":\"172.71.110.210\",\"rule_id\":\"m_rule/d3d9446802a44259755d38e6d163e820\",\"event_id\":\"4035\",\"host\":\"iZbp189bpp3rwv6may59rtZ\",\"program\":\"safeline-ce\",\"dst_host\":\"seclink.info:443\",\"url\":\"/.git/config\",\"timestamp\":\" Dec 03 12:43:10\"}"
+      }
+    },
+    {
+      "es_id": "0DTK45oBQUHKddHoevrw",
+      "mapped": {
+        "_timestamp": null,
+        "alert_id": "33309782ad90adcf19eea647152732250d18c9b39053cc8e63cbf56fe4633d5c",
+        "category": "External Attack",
+        "date": "2025-12-03T10:38:08.443Z",
+        "description": "Identifies attempts to login to AWS as the root user without using multi-factor authentication (MFA). Amazon AWS best practices indicate that the root user should be protected by MFA.",
+        "destination": "235103096742",
+        "dst_host": null,
+        "event_id": null,
+        "firstactivitytime": "2025-12-03T10:31:28.983Z",
+        "host": null,
+        "message": null,
+        "observer_ip": "",
+        "program": null,
+        "raw": "",
+        "raw_timestamp": null,
+        "references": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user.html",
+        "risk_object": "",
+        "risk_score": "73",
+        "rule_id": "a6f2a6dd-b24d-43a2-ad7d-4914f7af736a",
+        "rule_name": null,
+        "severity": "high",
+        "source_ip": "129.227.235.35",
+        "src_ip": null,
+        "tactic_id": "TA0004",
+        "tactic_name": "Privilege Escalation",
+        "tags": "Domain: Cloud,Data Source: AWS,Data Source: Amazon Web Services,Data Source: AWS Route53,Use Case: Identity and Access Audit,Resources: Investigation Guide,Tactic: Privilege Escalation",
+        "technique_id": "T1078",
+        "technique_name": "Valid Accounts",
+        "tenant_id": null,
+        "timestamp": null,
+        "title": "AWS Root Login Without MFA [Duplicate]",
+        "url": null
+      },
+      "raw": {
+        "date": "2025-12-03T10:38:08.443Z",
+        "alert_id": "33309782ad90adcf19eea647152732250d18c9b39053cc8e63cbf56fe4633d5c",
+        "rule_id": "a6f2a6dd-b24d-43a2-ad7d-4914f7af736a",
+        "title": "AWS Root Login Without MFA [Duplicate]",
+        "description": "Identifies attempts to login to AWS as the root user without using multi-factor authentication (MFA). Amazon AWS best practices indicate that the root user should be protected by MFA.",
+        "severity": "high",
+        "risk_score": "73",
+        "references": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user.html",
+        "tags": "Domain: Cloud,Data Source: AWS,Data Source: Amazon Web Services,Data Source: AWS Route53,Use Case: Identity and Access Audit,Resources: Investigation Guide,Tactic: Privilege Escalation",
+        "category": "External Attack",
+        "source_ip": "129.227.235.35",
+        "firstactivitytime": "2025-12-03T10:31:28.983Z",
+        "observer_ip": "",
+        "destination": "235103096742",
+        "risk_object": "",
+        "tactic_id": "TA0004",
+        "tactic_name": "Privilege Escalation",
+        "technique_id": "T1078",
+        "technique_name": "Valid Accounts",
+        "raw": ""
+      }
+    }
+  ],
+  "errors": []
+}
