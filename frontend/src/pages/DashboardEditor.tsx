@@ -9,7 +9,7 @@ import { queryPreview, listDatasources } from '../api'
 import Panel from '../pages/Panel'
 import PanelConfigModal from '../pages/PanelConfigModal'
 import { listDashboards, createDashboard, getDashboard, updateDashboard, deleteDashboard } from '../api'
-import { Column, Line, Pie, Scatter } from '@ant-design/charts'
+import { Column, Bar, Line, Pie, Scatter } from '@ant-design/charts'
 import { Table } from 'antd'
 
 // 文件级中文说明：
@@ -205,7 +205,11 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
                                   return <Pie data={data} angleField={bindings.angleField || 'value'} colorField={bindings.colorField || detectedX} height={size.height} width={size.width} />
                                 case 'scatter':
                                   return <Scatter data={data} xField={bindings.xField || 'x'} yField={bindings.yField || 'y'} height={size.height} width={size.width} />
-                                case 'bar':
+                                case 'bar': {
+                                  const barX = bindings.xField || 'value'
+                                  const barY = bindings.yField || detectedX
+                                  return <Bar data={data} xField={barX} yField={barY} height={size.height} width={size.width} />
+                                }
                                 case 'column':
                                 default:
                                   return <Column data={data} xField={bindings.xField || detectedX} yField={bindings.yField || 'value'} height={size.height} width={size.width} />
