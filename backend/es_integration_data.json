@@ -1,0 +1,1 @@
+[{"model": "es_integration.esintegrationconfig", "pk": 1, "fields": {"tenant_id": "tenant_unassigned", "enabled": true, "hosts": "http://47.98.143.194:9200", "index": "alerts", "username": "elastic", "password": "nUixdMR8qpV0vIom0L6Y", "use_ssl": false, "verify_certs": false}}]

@@ -1,13 +1,31 @@
+"""Elasticsearch access + alert listing helpers.
+
+Data flow (high level):
+- Frontend -> `AlertListView` -> `AlertService.list_alerts_for_tenant()`.
+- Prefer DB cache (`es_integration_alert`) when present.
+- Otherwise fetch from ES (client or HTTP fallback) and upsert into DB.
+"""
+
 import json
+import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Tuple
 import logging
 import inspect
 import urllib.request
 import urllib.error
+import base64
+import time
 
-from .models import ESIntegrationConfig
+import requests
+
+from django.db import DatabaseError, IntegrityError, transaction
+from django.db.models import Case, CharField, Count, IntegerField, Sum, Value, When
+from django.db.models.functions import TruncHour
+from django.utils import timezone
+
+from .models import Alert, ESIntegrationConfig
 
 MOCK_FILE = Path(__file__).resolve().parent / 'mock_alerts.json'
 
@@ -17,6 +35,91 @@ except Exception:
     Elasticsearch = None
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_es_timestamp(value) -> datetime | None:
+    """Parse timestamps like `2025-12-16T12:00:00Z` (with/without fractions)."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        value = str(value)
+    raw = value.strip()
+    if raw.endswith('Z'):
+        raw = raw[:-1] + '+00:00'
+    try:
+        return datetime.fromisoformat(raw)
+    except Exception:
+        return None
+
+
+def _coerce_int(value):
+    try:
+        if value is None or value == '':
+            return None
+        return int(value)
+    except Exception:
+        return None
+
+
+def _serialize_alert_row(row: Alert) -> Dict:
+    # Keep output ES-like for the frontend.
+    payload = dict(row.source_data) if isinstance(row.source_data, dict) else {}
+    payload.update(
+        {
+            'alert_id': row.alert_id,
+            'tenant_id': row.tenant_id,
+            'timestamp': row.timestamp.isoformat().replace('+00:00', 'Z') if row.timestamp else None,
+            'severity': row.severity,
+            'message': row.message,
+            'source_index': row.source_index,
+            'rule_id': row.rule_id,
+            'title': row.title,
+            'status': row.status,
+            'description': row.description,
+            'category': row.category,
+        }
+    )
+    return payload
+
+
+def _upsert_docs_to_db(docs: List[Dict]) -> None:
+    """Upsert ES docs into Postgres (best-effort).
+
+    This runs inline in the request path, so keep it resilient.
+    """
+    for doc in docs:
+        try:
+            alert_id = doc.get('alert_id')
+            defaults = {
+                'tenant_id': doc.get('tenant_id'),
+                'timestamp': _parse_es_timestamp(doc.get('timestamp')),
+                'severity': doc.get('severity'),
+                'message': doc.get('message'),
+                'source_index': doc.get('source_index'),
+                'rule_id': doc.get('rule_id'),
+                'title': doc.get('title'),
+                'status': _coerce_int(doc.get('status')),
+                'description': doc.get('description'),
+                'category': doc.get('category'),
+                'source_data': doc,
+            }
+            with transaction.atomic():
+                if alert_id:
+                    existing = Alert.objects.filter(alert_id=alert_id).order_by('-id').first()
+                    if existing:
+                        for k, v in defaults.items():
+                            setattr(existing, k, v)
+                        existing.save(update_fields=list(defaults.keys()))
+                    else:
+                        Alert.objects.create(alert_id=alert_id, **defaults)
+                else:
+                    Alert.objects.create(alert_id=None, **defaults)
+        except (IntegrityError, DatabaseError):
+            logger.exception('DB upsert failed for alert_id=%s tenant_id=%s', doc.get('alert_id'), doc.get('tenant_id'))
+        except Exception:
+            logger.exception('Unexpected upsert error for alert_id=%s tenant_id=%s', doc.get('alert_id'), doc.get('tenant_id'))
 
 
 def _detect_es_major_version(host_url: str, timeout: int = 5) -> int:
@@ -41,8 +144,51 @@ def _detect_es_major_version(host_url: str, timeout: int = 5) -> int:
     return 8  # sensible default
 
 
+def _detect_python_es_client_major_version() -> int | None:
+    """Best-effort detect the installed `elasticsearch` Python client's major version."""
+    try:
+        import elasticsearch as es_mod
+
+        ver = getattr(es_mod, '__version__', None)
+        if isinstance(ver, tuple) and ver:
+            return int(ver[0])
+        if isinstance(ver, str) and ver:
+            return int(ver.split('.')[0])
+    except Exception:
+        return None
+    return None
+
+
+def _get_es_headers(cfg: ESIntegrationConfig) -> dict:
+    """Generate headers for Elasticsearch requests, including Authorization."""
+    headers = {}
+    if cfg.username and cfg.password:
+        credentials = f"{cfg.username}:{cfg.password}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        headers["Authorization"] = f"Basic {encoded_credentials}"
+    headers["Content-Type"] = "application/json"
+    headers["Accept"] = "application/json"
+    return headers
+
+
+def _get_http_timeouts(default_read_timeout: int) -> tuple[float, float]:
+    """Return (connect_timeout, read_timeout) for requests."""
+    try:
+        connect_timeout = float(os.getenv('ES_HTTP_CONNECT_TIMEOUT_SECONDS', '5'))
+    except Exception:
+        connect_timeout = 5.0
+    try:
+        read_timeout = float(os.getenv('ES_HTTP_READ_TIMEOUT_SECONDS', str(default_read_timeout)))
+    except Exception:
+        read_timeout = float(default_read_timeout)
+    return connect_timeout, read_timeout
+
+
 def _http_search(cfg: ESIntegrationConfig, body: dict, timeout: int = 30) -> List[Dict]:
-    """Perform a direct HTTP POST to ES _search with proper media-type headers."""
+    """Perform a direct HTTP POST to ES _search.
+
+    Uses `requests` for better timeout/retry behavior than urllib.
+    """
     hosts = cfg.hosts_list()
     if not hosts:
         return []
@@ -52,65 +198,60 @@ def _http_search(cfg: ESIntegrationConfig, body: dict, timeout: int = 30) -> Lis
     if host.endswith('/'):
         host = host[:-1]
     url = f"{host}/{cfg.index}/_search"
-    # Try the detected server major version first, then fall back to 8 and 7
-    detected = _detect_es_major_version(host)
-    try_versions = []
-    if detected not in try_versions:
-        try_versions.append(detected)
-    for v in (8, 7):
-        if v not in try_versions:
-            try_versions.append(v)
 
-    data = json.dumps(body).encode('utf-8')
-    last_exc = None
-    for compat_version in try_versions:
-        media_type = f"application/vnd.elasticsearch+json; compatible-with={compat_version}"
-        headers = {"Accept": media_type, "Content-Type": media_type}
-        req = urllib.request.Request(url, data=data, headers=headers, method='POST')
+    headers = _get_es_headers(cfg)
+    auth = (cfg.username, cfg.password) if cfg.username and cfg.password else None
+
+    connect_timeout, read_timeout = _get_http_timeouts(timeout)
+    retries = 0
+    try:
+        retries = int(os.getenv('ES_HTTP_RETRIES', '2'))
+    except Exception:
+        retries = 2
+
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                text = resp.read().decode('utf-8')
-                res = json.loads(text)
-                hits = [h.get('_source', {}) for h in res.get('hits', {}).get('hits', [])]
-                logger.info('HTTP _search succeeded with compatible-with=%s, returned %d hits', compat_version, len(hits))
-                return hits
-        except urllib.error.HTTPError as http_err:
-            # HTTP 400 media-type mismatch or similar — try next compat version
-            try:
-                body_text = http_err.read().decode('utf-8')
-            except Exception:
-                body_text = ''
-            logger.warning('HTTP _search failed for compatible-with=%s: %s %s', compat_version, http_err, body_text)
-            last_exc = http_err
-            # If the error indicates missing mapping for timestamp (we sorted on it), retry once without sort
-            if 'No mapping found for [timestamp' in body_text or 'No mapping found for timestamp' in body_text:
-                try:
-                    body_nosort = dict(body)
-                    if 'sort' in body_nosort:
-                        del body_nosort['sort']
-                    data_n = json.dumps(body_nosort).encode('utf-8')
-                    req2 = urllib.request.Request(url, data=data_n, headers=headers, method='POST')
-                    with urllib.request.urlopen(req2, timeout=timeout) as resp2:
-                        text2 = resp2.read().decode('utf-8')
-                        res2 = json.loads(text2)
-                        hits2 = [h.get('_source', {}) for h in res2.get('hits', {}).get('hits', [])]
-                        logger.info('HTTP _search (no sort) succeeded with compatible-with=%s, returned %d hits', compat_version, len(hits2))
-                        return hits2
-                except Exception as e:
-                    logger.warning('Retry without sort also failed for compatible-with=%s: %s', compat_version, e)
-            continue
-        except urllib.error.URLError as url_err:
-            # Network-level error — no point in trying different media types
-            logger.exception('Network error when attempting HTTP _search to %s: %s', url, url_err)
-            last_exc = url_err
-            break
-        except Exception as e:
-            logger.exception('Unexpected error during HTTP _search attempt: %s', e)
+            resp = requests.post(
+                url,
+                headers=headers,
+                json=body,
+                auth=auth,
+                timeout=(connect_timeout, read_timeout),
+                verify=bool(getattr(cfg, 'verify_certs', True)),
+            )
+            resp.raise_for_status()
+            res = resp.json()
+            hits = [h.get('_source', {}) for h in res.get('hits', {}).get('hits', [])]
+            logger.info(
+                'HTTP _search succeeded (attempt=%d url=%s timeout=%ss), returned %d hits',
+                attempt + 1,
+                url,
+                read_timeout,
+                len(hits),
+            )
+            return hits
+        except requests.Timeout as e:
             last_exc = e
-            continue
+            logger.warning('HTTP _search timeout (attempt=%d/%d url=%s timeout=%ss)', attempt + 1, retries + 1, url, read_timeout)
+        except requests.HTTPError as e:
+            # no point retrying most HTTP errors; log response for debugging
+            logger.error('HTTP _search failed (status=%s url=%s): %s', getattr(e.response, 'status_code', None), url, e)
+            try:
+                logger.error('HTTP _search response body: %s', (e.response.text or '')[:2000])
+            except Exception:
+                pass
+            return []
+        except requests.RequestException as e:
+            last_exc = e
+            logger.warning('HTTP _search request error (attempt=%d/%d url=%s): %s', attempt + 1, retries + 1, url, e)
+
+        # small backoff between retries
+        if attempt < retries:
+            time.sleep(min(0.5 * (attempt + 1), 2.0))
 
     if last_exc:
-        logger.debug('All HTTP fallback attempts failed for %s (tried versions %s)', url, try_versions)
+        logger.exception('HTTP _search failed after retries (url=%s): %s', url, last_exc)
     return []
 
 
@@ -128,22 +269,25 @@ def _index_has_field(cfg: ESIntegrationConfig, field: str, timeout: int = 5) -> 
     if host.endswith('/'):
         host = host[:-1]
     url = f"{host}/{cfg.index}/_mapping"
+    headers = _get_es_headers(cfg)
+    auth = (cfg.username, cfg.password) if cfg.username and cfg.password else None
+    connect_timeout, read_timeout = _get_http_timeouts(timeout)
     try:
-        req = urllib.request.Request(url, method='GET')
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            text = resp.read().decode('utf-8')
-            data = json.loads(text)
-            # mapping structure may vary; search for the field name in mapping properties
-            def find_field(d):
-                if isinstance(d, dict):
-                    for k, v in d.items():
-                        if k == field:
+        resp = requests.get(url, headers=headers, auth=auth, timeout=(connect_timeout, read_timeout), verify=bool(getattr(cfg, 'verify_certs', True)))
+        resp.raise_for_status()
+        data = resp.json()
+        # mapping structure may vary; search for the field name in mapping properties
+        def find_field(d):
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    if k == field:
+                        return True
+                    if isinstance(v, dict):
+                        if find_field(v):
                             return True
-                        if isinstance(v, dict):
-                            if find_field(v):
-                                return True
-                return False
-            return find_field(data)
+            return False
+
+        return find_field(data)
     except Exception as e:
         logger.debug('Failed to fetch mapping for %s/%s: %s', cfg.hosts_list(), cfg.index, e)
         return False
@@ -162,14 +306,17 @@ def _detect_timestamp_field(cfg: ESIntegrationConfig, candidates=None) -> str:
             return None
         host = hosts[0]
         url = f"{host.rstrip('/')}/{cfg.index}/_mapping"
-        req = urllib.request.Request(url, method='GET')
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            # Convert to string and search for field names (best-effort)
-            text = json.dumps(data)
-            for c in candidates:
-                if f'"{c}"' in text:
-                    return c
+        headers = _get_es_headers(cfg)
+        auth = (cfg.username, cfg.password) if cfg.username and cfg.password else None
+        connect_timeout, read_timeout = _get_http_timeouts(5)
+        resp = requests.get(url, headers=headers, auth=auth, timeout=(connect_timeout, read_timeout), verify=bool(getattr(cfg, 'verify_certs', True)))
+        resp.raise_for_status()
+        data = resp.json()
+        # Convert to string and search for field names (best-effort)
+        text = json.dumps(data)
+        for c in candidates:
+            if f'"{c}"' in text:
+                return c
     except Exception as e:
         logger.debug('Failed to detect timestamp field for %s/%s: %s', cfg.hosts_list(), cfg.index, e)
     return None
@@ -195,9 +342,12 @@ def _resolve_timestamp_sort_field(cfg: ESIntegrationConfig, detected_field: str,
     host = hosts[0]
     try:
         url = f"{host.rstrip('/')}/{cfg.index}/_mapping"
-        req = urllib.request.Request(url, method='GET')
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            mapping = json.loads(resp.read().decode('utf-8'))
+        headers = _get_es_headers(cfg)
+        auth = (cfg.username, cfg.password) if cfg.username and cfg.password else None
+        connect_timeout, read_timeout = _get_http_timeouts(5)
+        resp = requests.get(url, headers=headers, auth=auth, timeout=(connect_timeout, read_timeout), verify=bool(getattr(cfg, 'verify_certs', True)))
+        resp.raise_for_status()
+        mapping = resp.json()
     except Exception as e:
         logger.debug('Failed to fetch mapping for resolving timestamp field: %s', e)
         return None
@@ -305,11 +455,40 @@ class AlertService:
                 return None
 
     @staticmethod
-    def list_alerts_for_tenant(tenant_id: str, force_es: bool = False, force_mock: bool = False) -> Tuple[List[Dict], str]:
-        """Return (alerts, source) where source is 'es', 'es-http' or 'mock'."""
+    def list_alerts_for_tenant(
+        tenant_id: str,
+        force_es: bool = False,
+        force_mock: bool = False,
+        force_db: bool = False,
+    ) -> Tuple[List[Dict], str]:
+        """Return (alerts, source) where source is 'db', 'es', 'es-http' or 'mock'."""
         if force_mock:
             alerts = AlertService.load_mock_alerts()
             return [a for a in alerts if a['tenant_id'] == tenant_id], 'mock'
+
+        # Force DB means: never hit ES, return only cached DB rows (may be empty).
+        if force_db:
+            try:
+                cached = list(
+                    Alert.objects.filter(tenant_id=tenant_id)
+                    .order_by('-timestamp')[:100]
+                )
+                return [_serialize_alert_row(r) for r in cached], 'db'
+            except Exception as e:
+                logger.exception('DB read failed in force_db mode (tenant=%s): %s', tenant_id, e)
+                return [], 'db'
+
+        if not force_es:
+            try:
+                cached = list(
+                    Alert.objects.filter(tenant_id=tenant_id)
+                    .order_by('-timestamp')[:100]
+                )
+                if cached:
+                    return [_serialize_alert_row(r) for r in cached], 'db'
+            except Exception as e:
+                logger.exception('DB read failed, falling back to ES/mock: %s', e)
+
         # Check ES config
         try:
             cfg = ESIntegrationConfig.objects.filter(tenant_id=tenant_id).first()
@@ -317,7 +496,7 @@ class AlertService:
             cfg = None
 
         if cfg and (cfg.enabled or force_es):
-            # Determine whether to prefer the HTTP fallback based on server version
+            # Prefer the python client when it's compatible; fall back to HTTP when needed.
             prefer_http = False
             hosts = []
             try:
@@ -329,8 +508,14 @@ class AlertService:
             if hosts:
                 try:
                     server_major = _detect_es_major_version(hosts[0])
-                    if server_major and server_major < 9:
-                        logger.info('ES server reports major version %s; preferring HTTP fallback to avoid media-type mismatch', server_major)
+                    client_major = _detect_python_es_client_major_version()
+                    # Only force HTTP when the installed python client is newer than the cluster.
+                    if server_major and client_major and client_major > server_major:
+                        logger.info(
+                            'ES server major=%s, python client major=%s; preferring HTTP fallback to avoid media-type mismatch',
+                            server_major,
+                            client_major,
+                        )
                         prefer_http = True
                 except Exception:
                     # leave prefer_http as False; we'll attempt client then fallback
@@ -353,6 +538,10 @@ class AlertService:
                         res = es.search(index=cfg.index, body=body, request_timeout=30)
                         hits = [h.get('_source', {}) for h in res.get('hits', {}).get('hits', [])]
                         logger.info('Fetched %d alerts from ES for tenant %s', len(hits), tenant_id)
+                        try:
+                            _upsert_docs_to_db(hits)
+                        except Exception:
+                            logger.exception('Best-effort DB upsert failed (source=es)')
                         return hits, 'es'
                     except Exception as e:
                         logger.exception('Elasticsearch query failed: %s', e)
@@ -365,6 +554,10 @@ class AlertService:
                 hits = _http_search(cfg, body, timeout=30)
                 if hits:
                     logger.info('Fetched %d alerts from ES via HTTP fallback for tenant %s', len(hits), tenant_id)
+                    try:
+                        _upsert_docs_to_db(hits)
+                    except Exception:
+                        logger.exception('Best-effort DB upsert failed (source=es-http)')
                     return hits, 'es-http'
             except Exception as e2:
                 logger.exception('HTTP fallback failed: %s', e2)
@@ -373,13 +566,24 @@ class AlertService:
         return [a for a in alerts if a['tenant_id'] == tenant_id], 'mock'
 
     @staticmethod
-    def aggregate_dashboard(tenant_id: str, force_es: bool = False, force_mock: bool = False) -> Dict:
-        alerts, source = AlertService.list_alerts_for_tenant(tenant_id, force_es=force_es, force_mock=force_mock)
-        severity_counts = {}
-        timeline = {}
-        source_index_counts = {}
-        daily_trend = {}
-        message_topN = {}
+    def aggregate_dashboard(tenant_id: str, force_es: bool = False, force_mock: bool = False, force_db: bool = False) -> Dict:
+        # Default behavior: keep existing fields for backward compatibility.
+        # Additionally, compute richer dashboard metrics directly from Postgres so
+        # counts are not limited to the latest 100 cached rows.
+
+        alerts, source = AlertService.list_alerts_for_tenant(
+            tenant_id,
+            force_es=force_es,
+            force_mock=force_mock,
+            force_db=force_db,
+        )
+
+        severity_counts: Dict[str, int] = {}
+        timeline: Dict[str, int] = {}
+        source_index_counts: Dict[str, int] = {}
+        daily_trend: Dict[str, int] = {}
+        message_topN: Dict[str, int] = {}
+
         ts_field = None
         try:
             cfg = ESIntegrationConfig.objects.filter(tenant_id=tenant_id).first()
@@ -387,6 +591,7 @@ class AlertService:
                 ts_field = _detect_timestamp_field(cfg) or 'timestamp'
         except Exception:
             ts_field = 'timestamp'
+
         for a in alerts:
             sev = a.get('severity', 'unknown')
             severity_counts[sev] = severity_counts.get(sev, 0) + 1
@@ -400,7 +605,7 @@ class AlertService:
             else:
                 if isinstance(raw_ts, str):
                     try:
-                        dt = datetime.fromisoformat(raw_ts)
+                        dt = datetime.fromisoformat(raw_ts.replace('Z', '+00:00'))
                         hour = dt.strftime('%Y-%m-%dT%H')
                         day = dt.strftime('%Y-%m-%d')
                     except Exception:
@@ -408,7 +613,7 @@ class AlertService:
                         day = raw_ts[:10]
                 else:
                     try:
-                        dt = datetime.fromisoformat(str(raw_ts))
+                        dt = datetime.fromisoformat(str(raw_ts).replace('Z', '+00:00'))
                         hour = dt.strftime('%Y-%m-%dT%H')
                         day = dt.strftime('%Y-%m-%d')
                     except Exception:
@@ -425,14 +630,261 @@ class AlertService:
             msg = a.get('message', '')
             if msg:
                 message_topN[msg] = message_topN.get(msg, 0) + 1
-        # 只返回 message 出现最多的前 20 条
+
         top_messages = dict(sorted(message_topN.items(), key=lambda x: x[1], reverse=True)[:20])
+
+        # DB-based aggregates (preferred when DB is available)
+        now = timezone.now()
+        cutoff_1h = now - timedelta(hours=1)
+        cutoff_trend = now - timedelta(days=7)
+
+        total_alerts_db = None
+        last_1h_alerts_db = None
+        data_source_count_db = None
+        enabled_rule_count_db = None
+        detected_rule_count_1h_db = None
+        category_counts_db: Dict[str, int] = {}
+        severity_level_counts_db: Dict[str, int] = {}
+        alert_trend_db: Dict[str, int] = {}
+        alert_score_trend_db: Dict[str, int] = {}
+        alert_trend_series_db: List[Dict[str, int | str]] = []
+        alert_score_trend_series_db: List[Dict[str, int | str]] = []
+        top_source_ips: List[Dict[str, int | str]] = []
+        top_users: List[Dict[str, int | str]] = []
+        top_sources: List[Dict[str, int | str]] = []
+        top_rules: List[Dict[str, int | str]] = []
+
+        try:
+            qs = Alert.objects.filter(tenant_id=tenant_id)
+            total_alerts_db = qs.count()
+            last_1h_alerts_db = qs.filter(timestamp__gte=cutoff_1h).count()
+            data_source_count_db = qs.exclude(source_index__isnull=True).exclude(source_index='').values('source_index').distinct().count()
+            enabled_rule_count_db = qs.exclude(rule_id__isnull=True).exclude(rule_id='').values('rule_id').distinct().count()
+            detected_rule_count_1h_db = (
+                qs.filter(timestamp__gte=cutoff_1h)
+                .exclude(rule_id__isnull=True)
+                .exclude(rule_id='')
+                .values('rule_id')
+                .distinct()
+                .count()
+            )
+
+            # category pie
+            for row in (
+                qs.values('category')
+                .annotate(c=Count('id'))
+                .order_by('-c')[:20]
+            ):
+                k = row.get('category') or 'unknown'
+                category_counts_db[str(k)] = int(row.get('c') or 0)
+
+            def _severity_to_tier(raw: object) -> str:
+                """Normalize raw severities into 4 tiers.
+
+                Accepts:
+                - common strings: critical/high/medium/low + variants (warn/info/fatal/error...)
+                - numeric severities stored as strings/ints:
+                  - 0-15 (e.g. Wazuh rule.level)
+                  - 0-100 (some SIEM scores)
+                """
+
+                if raw is None:
+                    return 'unknown'
+
+                # numeric handling (int-like strings included)
+                try:
+                    if isinstance(raw, (int, float)):
+                        n = int(raw)
+                    else:
+                        s0 = str(raw).strip()
+                        if s0 and (s0.isdigit() or (s0.startswith('-') and s0[1:].isdigit())):
+                            n = int(s0)
+                        else:
+                            n = None
+                except Exception:
+                    n = None
+
+                if n is not None:
+                    # Heuristic: treat <=15 as 0-15 scale; otherwise assume 0-100.
+                    if n <= 15:
+                        if n >= 12:
+                            return 'critical'
+                        if n >= 9:
+                            return 'high'
+                        if n >= 6:
+                            return 'medium'
+                        return 'low'
+                    # 0-100-ish
+                    if n >= 90:
+                        return 'critical'
+                    if n >= 70:
+                        return 'high'
+                    if n >= 40:
+                        return 'medium'
+                    return 'low'
+
+                s = str(raw).strip().lower()
+                # tolerate common variants / typos
+                if s in {'critical', 'crtical', 'crit', 'fatal', 'emergency', 'emerg', 'panic'}:
+                    return 'critical'
+                if s in {'high', 'error', 'err', 'severe'}:
+                    return 'high'
+                if s in {'warning', 'warn', 'medium', 'med', 'moderate'}:
+                    return 'medium'
+                if s in {'info', 'informational', 'notice', 'low', 'debug'}:
+                    return 'low'
+                return 'unknown'
+
+            tier_weight = {
+                'critical': 4,
+                'high': 3,
+                'medium': 2,
+                'low': 1,
+                'unknown': 0,
+            }
+
+            # severity distribution (tiered)
+            for row in (
+                qs.values('severity')
+                .annotate(c=Count('id'))
+                .order_by('-c')
+            ):
+                tier = _severity_to_tier(row.get('severity'))
+                severity_level_counts_db[tier] = severity_level_counts_db.get(tier, 0) + int(row.get('c') or 0)
+
+            # alert trend (hour buckets, last 7d)
+            for row in (
+                qs.filter(timestamp__gte=cutoff_trend)
+                .exclude(timestamp__isnull=True)
+                .annotate(h=TruncHour('timestamp'))
+                .values('h')
+                .annotate(c=Count('id'))
+                .order_by('h')
+            ):
+                h = row.get('h')
+                if h is None:
+                    continue
+                alert_trend_db[h.isoformat(timespec='hours')] = int(row.get('c') or 0)
+
+            # Build stacked series and score trend from a simple per-hour/per-severity rollup.
+            per_hour_sev_rows = (
+                qs.filter(timestamp__gte=cutoff_trend)
+                .exclude(timestamp__isnull=True)
+                .annotate(h=TruncHour('timestamp'))
+                .values('h', 'severity')
+                .annotate(c=Count('id'))
+                .order_by('h')
+            )
+
+            counts_by_bucket: Dict[tuple[str, str], int] = {}
+            score_by_hour: Dict[str, int] = {}
+            score_by_bucket: Dict[tuple[str, str], int] = {}
+            for row in per_hour_sev_rows:
+                h = row.get('h')
+                if h is None:
+                    continue
+                hour_key = h.isoformat(timespec='hours')
+                tier = _severity_to_tier(row.get('severity'))
+                c = int(row.get('c') or 0)
+
+                counts_by_bucket[(hour_key, tier)] = counts_by_bucket.get((hour_key, tier), 0) + c
+                tier_score = c * int(tier_weight.get(tier, 0))
+                score_by_bucket[(hour_key, tier)] = score_by_bucket.get((hour_key, tier), 0) + tier_score
+                score_by_hour[hour_key] = score_by_hour.get(hour_key, 0) + tier_score
+
+            # Stacked series outputs
+            for (hour_key, tier), c in sorted(counts_by_bucket.items()):
+                alert_trend_series_db.append({'time': hour_key, 'series': tier, 'value': int(c)})
+            for (hour_key, tier), s in sorted(score_by_bucket.items()):
+                alert_score_trend_series_db.append({'time': hour_key, 'series': tier, 'value': int(s)})
+
+            # Total score trend per hour
+            for hour_key, s in sorted(score_by_hour.items()):
+                alert_score_trend_db[hour_key] = int(s)
+
+            # top sources (source_index)
+            for row in (
+                qs.exclude(source_index__isnull=True)
+                .exclude(source_index='')
+                .values('source_index')
+                .annotate(c=Count('id'))
+                .order_by('-c')[:10]
+            ):
+                top_sources.append({'name': row.get('source_index') or 'unknown', 'count': int(row.get('c') or 0)})
+
+            # top rules (rule_id)
+            for row in (
+                qs.exclude(rule_id__isnull=True)
+                .exclude(rule_id='')
+                .values('rule_id')
+                .annotate(c=Count('id'))
+                .order_by('-c')[:10]
+            ):
+                top_rules.append({'name': row.get('rule_id') or 'unknown', 'count': int(row.get('c') or 0)})
+
+            # For top IP/users we do best-effort extraction from JSON.
+            # Use a bounded window to avoid full-table scans.
+            recent_payloads = list(
+                qs.order_by('-timestamp')
+                .values_list('source_data', flat=True)[:5000]
+            )
+            ip_counts: Dict[str, int] = {}
+            user_counts: Dict[str, int] = {}
+            ip_keys = ['source_ip', 'src_ip', 'client_ip']
+            user_keys = ['username', 'user', 'user_name', 'account', 'user_id', 'src_user']
+            for payload in recent_payloads:
+                if not isinstance(payload, dict):
+                    continue
+                ip_val = None
+                for k in ip_keys:
+                    v = payload.get(k)
+                    if v:
+                        ip_val = str(v)
+                        break
+                if ip_val:
+                    ip_counts[ip_val] = ip_counts.get(ip_val, 0) + 1
+
+                user_val = None
+                for k in user_keys:
+                    v = payload.get(k)
+                    if v:
+                        user_val = str(v)
+                        break
+                if user_val:
+                    user_counts[user_val] = user_counts.get(user_val, 0) + 1
+
+            for name, c in sorted(ip_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
+                top_source_ips.append({'name': name, 'count': int(c)})
+            for name, c in sorted(user_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
+                top_users.append({'name': name, 'count': int(c)})
+        except Exception:
+            logger.exception('DB aggregate_dashboard failed for tenant %s; using limited in-memory aggregates', tenant_id)
+
         return {
+            # existing keys
             'severity': severity_counts,
             'timeline': timeline,
-            'total': len(alerts),
+            'total': total_alerts_db if total_alerts_db is not None else len(alerts),
             'source': source,
             'source_index': source_index_counts,
             'daily_trend': daily_trend,
-            'top_messages': top_messages
+            'top_messages': top_messages,
+
+            # new metrics requested
+            'recent_1h_alerts': last_1h_alerts_db,
+            'data_source_count': data_source_count_db,
+            'enabled_siem_rule_count': enabled_rule_count_db,
+            'siem_rule_detected_count_1h': detected_rule_count_1h_db,
+
+            # new dashboard blocks
+            'category_breakdown': category_counts_db,
+            'severity_distribution': severity_level_counts_db,
+            'alert_trend': alert_trend_db,
+            'alert_score_trend': alert_score_trend_db,
+            'alert_trend_series': alert_trend_series_db,
+            'alert_score_trend_series': alert_score_trend_series_db,
+            'top_source_ips': top_source_ips,
+            'top_users': top_users,
+            'top_sources': top_sources,
+            'top_rules': top_rules,
         }

@@ -58,8 +58,12 @@ WSGI_APPLICATION = 'siem_project.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'siem_db',
+        'USER': 'siem_user',
+        'PASSWORD': 'siem_password',
+        'HOST': 'localhost',  # Use 'db' if running in Docker, or 'localhost' if running locally
+        'PORT': '5432',
     }
 }
 
@@ -123,6 +127,10 @@ LOGGING = {
         'users': {
             'handlers': ['console'],
             'level': 'INFO'
+        },
+        'es_integration': {
+            'handlers': ['console'],
+            'level': 'INFO',
         },
     }
 }

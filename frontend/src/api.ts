@@ -43,22 +43,31 @@ export async function login(username: string, password: string, tenant_id?: stri
   return res.data;
 }
 
-export async function fetchAlerts(page = 1, page_size = 20, mode?: 'es'|'mock'|'auto') {
+export async function fetchAlerts(page = 1, page_size = 20, mode?: 'es'|'mock'|'auto'|'db') {
   let url = `/alerts/list/?page=${page}&page_size=${page_size}`;
   if (mode === 'es') url += '&force_es=1';
   else if (mode === 'mock') url += '&mock=1';
+  else if (mode === 'db') url += '&force_db=1';
   const res = await client.get(url);
   return res.data;
 }
 
-export async function fetchDashboard(mode?: 'es' | 'mock' | 'auto') {
+export async function fetchDashboard(mode?: 'es' | 'mock' | 'auto' | 'db') {
   let url = '/alerts/dashboard/';
   if (mode === 'es') {
     url += '?force_es=1';
   } else if (mode === 'mock') {
     url += '?mock=1';
+  } else if (mode === 'db') {
+    url += '?force_db=1';
   }
   const res = await client.get(url);
+  return res.data;
+}
+
+export async function syncAlertsToDb(size: number = 100) {
+  const url = `/alerts/sync/?size=${encodeURIComponent(String(size))}`;
+  const res = await client.post(url);
   return res.data;
 }
 
