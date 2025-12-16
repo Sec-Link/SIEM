@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useContext } from 'react';
-import { Pie, Line } from '@ant-design/charts';
+import { Pie } from '@ant-design/charts';
 import { Column } from '@ant-design/plots';
-import { Card, Statistic, Row, Col, Space, Select, Button, Modal, Form, Input, Switch, message, Spin } from 'antd';
-import { fetchDashboard, getESConfig, setESConfig, getWebhookConfig, setWebhookConfig } from '../api';
+import { Card, Statistic, Row, Col, Space, Select, Button, Modal, Form, Input, Switch, message, Spin, Table } from 'antd';
+import { fetchDashboard, syncAlertsToDb, getESConfig, setESConfig, getWebhookConfig, setWebhookConfig } from '../api';
 import ModeContext from '../modeContext';
 import { DashboardData } from '../types';
 
@@ -19,13 +19,61 @@ const Dashboard: React.FC = () => {
 
   const CACHE_KEY = 'siem_dashboard_cache_v1';
   const POLL_INTERVAL_MS = 30 * 1000; // poll every 30s for less frequent refreshes
+  const DB_SYNC_MIN_INTERVAL_MS = 60 * 1000; // throttle ES->DB refresh in Force DB mode
+  const lastDbSyncAtRef = React.useRef<number>(0);
   const [esModalVisible, setEsModalVisible] = useState(false);
   const [webhookModalVisible, setWebhookModalVisible] = useState(false);
   const [esConfig, setEsConfigState] = useState<any>(null);
   const [webhookConfig, setWebhookConfigState] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [trendGroupBy, setTrendGroupBy] = useState<'hour' | 'day'>('hour');
+  const [scoreGroupBy, setScoreGroupBy] = useState<'hour' | 'day'>('hour');
 
-  const load = async (m?: 'auto'|'es'|'mock') => {
+  const bucketizeTimeSeries = (
+    series: Record<string, number> | undefined,
+    unit: 'hour' | 'day'
+  ) => {
+    if (!series) return [] as Array<{ time: string; value: number }>;
+    const acc: Record<string, number> = {};
+    for (const [k, v] of Object.entries(series)) {
+      if (!k) continue;
+      // Backend hour keys may look like:
+      // - 2025-12-16T12
+      // - 2025-12-16T12+00:00
+      // - 2025-12-16T12:00:00+00:00
+      // Normalize to stable "YYYY-MM-DD" or "YYYY-MM-DDTHH" buckets.
+      let key = unit === 'day' ? k.slice(0, 10) : k.slice(0, 13);
+      if (key.endsWith(':')) key = key.slice(0, -1);
+      acc[key] = (acc[key] || 0) + (Number(v) || 0);
+    }
+    return Object.entries(acc)
+      .sort(([a], [b]) => (a > b ? 1 : a < b ? -1 : 0))
+      .map(([time, value]) => ({ time, value }));
+  };
+
+  const bucketizeStackedSeries = (
+    rows: Array<{ time: string; series: string; value: number }> | undefined,
+    unit: 'hour' | 'day'
+  ) => {
+    if (!rows || rows.length === 0) return [] as Array<{ time: string; series: string; value: number }>;
+    const acc: Record<string, number> = {};
+    for (const r of rows) {
+      if (!r?.time) continue;
+      let timeKey = unit === 'day' ? r.time.slice(0, 10) : r.time.slice(0, 13);
+      if (timeKey.endsWith(':')) timeKey = timeKey.slice(0, -1);
+      const seriesKey = r.series || 'unknown';
+      const k = `${timeKey}__${seriesKey}`;
+      acc[k] = (acc[k] || 0) + (Number(r.value) || 0);
+    }
+    return Object.entries(acc)
+      .map(([k, value]) => {
+        const idx = k.indexOf('__');
+        return { time: k.slice(0, idx), series: k.slice(idx + 2), value };
+      })
+      .sort((a, b) => (a.time > b.time ? 1 : a.time < b.time ? -1 : a.series.localeCompare(b.series)));
+  };
+
+  const load = async (m?: 'auto'|'db'|'es'|'mock') => {
     const useMode = m ?? modeRef.current;
     const isBackground = !!displayData;
     if (isBackground) {
@@ -34,6 +82,20 @@ const Dashboard: React.FC = () => {
       setLoading(true);
     }
     try {
+      // Force DB = render strictly from DB. To keep DB fresh without a separate scheduler,
+      // we trigger an on-demand ES->DB refresh (best-effort) before fetching the dashboard.
+      if (useMode === 'db') {
+        const now = Date.now();
+        if (!lastDbSyncAtRef.current || now - lastDbSyncAtRef.current >= DB_SYNC_MIN_INTERVAL_MS) {
+          try {
+            await syncAlertsToDb(200);
+            lastDbSyncAtRef.current = now;
+          } catch (e) {
+            // Ignore sync errors so dashboard can still show existing DB data.
+            console.warn('Force DB: ES->DB sync failed (ignored)', e);
+          }
+        }
+      }
       let res = await fetchDashboard(useMode);
       setData(res);
       // only update the displayData when we successfully fetched something
@@ -195,6 +257,7 @@ const Dashboard: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <Select value={mode} onChange={(v) => { setMode(v as any); modeRef.current = v as any; load(v as any); }} style={{ width: 160 }}>
             <Option value="auto">Auto (use config)</Option>
+            <Option value="db">Force DB</Option>
             <Option value="es">Force ES</Option>
             <Option value="mock">Force Mock</Option>
           </Select>
@@ -208,120 +271,315 @@ const Dashboard: React.FC = () => {
         </div>
       </Space>
 
-      <Row gutter={16} style={{ marginTop: 16 }}>
-        {/** use displayData (last successful) to avoid blanking while loading */}
-        <Col span={6}>
-          <Card>
+      {/* Single numbers (responsive + full-width fill) */}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 16,
+          marginTop: 16,
+          width: '100%',
+        }}
+      >
+        <div style={{ flex: '1 1 220px', minWidth: 220 }}>
+          <Card title="最近1小时告警">
             <Statistic
-              title="Total Alerts"
+              value={useAnimatedNumber((displayData?.recent_1h_alerts ?? 0) as number, 600)}
+              loading={!displayData && loading}
+              valueStyle={{ transition: 'all 0.5s cubic-bezier(.08,.82,.17,1)' }}
+            />
+          </Card>
+        </div>
+        <div style={{ flex: '1 1 220px', minWidth: 220 }}>
+          <Card title="累计告警">
+            <Statistic
               value={useAnimatedNumber(displayData?.total ?? 0, 600)}
               loading={!displayData && loading}
               valueStyle={{ transition: 'all 0.5s cubic-bezier(.08,.82,.17,1)' }}
             />
           </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
+        </div>
+        <div style={{ flex: '1 1 220px', minWidth: 220 }}>
+          <Card title="数据源">
             <Statistic
-              title="Critical"
-              value={useAnimatedNumber(displayData?.severity?.Critical ?? 0, 600)}
+              value={useAnimatedNumber((displayData?.data_source_count ?? 0) as number, 600)}
               loading={!displayData && loading}
               valueStyle={{ transition: 'all 0.5s cubic-bezier(.08,.82,.17,1)' }}
             />
           </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
+        </div>
+        <div style={{ flex: '1 1 220px', minWidth: 220 }}>
+          <Card title="启用SIEM规则数">
             <Statistic
-              title="Warning"
-              value={useAnimatedNumber(displayData?.severity?.Warning ?? 0, 600)}
+              value={useAnimatedNumber((displayData?.enabled_siem_rule_count ?? 0) as number, 600)}
               loading={!displayData && loading}
               valueStyle={{ transition: 'all 0.5s cubic-bezier(.08,.82,.17,1)' }}
             />
           </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
+        </div>
+        <div style={{ flex: '1 1 220px', minWidth: 220 }}>
+          <Card title="SIEM规则检测数（近1小时）">
             <Statistic
-              title="Info"
-              value={useAnimatedNumber(displayData?.severity?.Info ?? 0, 600)}
+              value={useAnimatedNumber((displayData?.siem_rule_detected_count_1h ?? 0) as number, 600)}
               loading={!displayData && loading}
               valueStyle={{ transition: 'all 0.5s cubic-bezier(.08,.82,.17,1)' }}
+            />
+          </Card>
+        </div>
+      </div>
+
+      {/* Row 1: Pie#1 + Bar#1 */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={10}>
+          {displayData?.category_breakdown && Object.keys(displayData.category_breakdown).length > 0 && (
+            <Card title="告警分类占比">
+              <Pie
+                data={Object.entries(displayData.category_breakdown).map(([type, value]) => ({ type, value }))}
+                angleField="value"
+                colorField="type"
+                radius={0.8}
+                height={320}
+                label={{ text: (d: any) => `${d.type}\n ${d.value}`, position: 'spider' }}
+                legend={{ color: { title: false, position: 'right', rowPadding: 5 } }}
+              />
+            </Card>
+          )}
+        </Col>
+        <Col xs={24} lg={14}>
+          {displayData?.alert_trend && Object.keys(displayData.alert_trend).length > 0 && (
+            <Card
+              title="告警趋势"
+              extra={
+                <Space>
+                  <span>Group by</span>
+                  <Select
+                    size="small"
+                    value={trendGroupBy}
+                    onChange={(v) => setTrendGroupBy(v as 'hour' | 'day')}
+                    style={{ width: 120 }}
+                    options={[
+                      { label: '1 hour', value: 'hour' },
+                      { label: '1 day', value: 'day' },
+                    ]}
+                  />
+                </Space>
+              }
+            >
+              {displayData?.alert_trend_series && displayData.alert_trend_series.length > 0 ? (
+                <Column
+                  data={bucketizeStackedSeries(displayData.alert_trend_series, trendGroupBy).map((r) => ({
+                    time: r.time,
+                    severity: r.series,
+                    count: r.value,
+                  }))}
+                  xField="time"
+                  yField="count"
+                  colorField="severity"
+                  stack={{
+                    // bottom -> top
+                    orderBy: (d: any) =>
+                      ({ low: 0, medium: 1, high: 2, critical: 3, unknown: 4 } as any)[
+                        String(d?.severity ?? 'unknown').toLowerCase()
+                      ] ?? 99,
+                  }}
+                  scale={{
+                    x: { type: 'band' },
+                    color: {
+                      domain: ['low', 'medium', 'high', 'critical', 'unknown'],
+                      range: ['#1677ff', '#fadb14', '#fa8c16', '#ff4d4f', '#8c8c8c'],
+                    },
+                  }}
+                  height={320}
+                  label={false}
+                  tooltip={{ showMarkers: false }}
+                  axis={{
+                    x: {
+                      title: false,
+                      labelAutoRotate: true,
+                      labelFormatter: (v: any) => {
+                        const s = String(v ?? '');
+                        // show timestamp under x-axis
+                        if (s.includes('T')) return s.replace('T', ' ') + ':00';
+                        return s;
+                      },
+                    },
+                    y: { title: false },
+                  }}
+                  legend={{ position: 'top' }}
+                />
+              ) : (
+                <Column
+                  data={bucketizeTimeSeries(displayData.alert_trend, trendGroupBy).map((d) => ({ time: d.time, count: d.value }))}
+                  xField="time"
+                  yField="count"
+                  colorField="time"
+                  legend={false}
+                  height={320}
+                  label={false}
+                  tooltip={{ showMarkers: false }}
+                  axis={{ x: false }}
+                />
+              )}
+            </Card>
+          )}
+        </Col>
+      </Row>
+
+      {/* Row 2: Pie#2 + Bar#2 */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={10}>
+          {displayData?.severity_distribution && Object.keys(displayData.severity_distribution).length > 0 && (
+            <Card title="告警严重分布">
+              <Pie
+                data={Object.entries(displayData.severity_distribution).map(([type, value]) => ({ type, value }))}
+                angleField="value"
+                colorField="type"
+                radius={0.8}
+                height={320}
+                label={{ text: (d: any) => `${d.type}\n ${d.value}`, position: 'spider' }}
+                legend={{ color: { title: false, position: 'right', rowPadding: 5 } }}
+              />
+            </Card>
+          )}
+        </Col>
+        <Col xs={24} lg={14}>
+          {displayData?.alert_score_trend && Object.keys(displayData.alert_score_trend).length > 0 && (
+            <Card
+              title="告警分数趋势"
+              extra={
+                <Space>
+                  <span>Group by</span>
+                  <Select
+                    size="small"
+                    value={scoreGroupBy}
+                    onChange={(v) => setScoreGroupBy(v as 'hour' | 'day')}
+                    style={{ width: 120 }}
+                    options={[
+                      { label: '1 hour', value: 'hour' },
+                      { label: '1 day', value: 'day' },
+                    ]}
+                  />
+                </Space>
+              }
+            >
+              {displayData?.alert_score_trend_series && displayData.alert_score_trend_series.length > 0 ? (
+                <Column
+                  data={bucketizeStackedSeries(displayData.alert_score_trend_series, scoreGroupBy).map((r) => ({
+                    time: r.time,
+                    severity: r.series,
+                    score: r.value,
+                  }))}
+                  xField="time"
+                  yField="score"
+                  colorField="severity"
+                  stack={{
+                    // bottom -> top
+                    orderBy: (d: any) =>
+                      ({ low: 0, medium: 1, high: 2, critical: 3, unknown: 4 } as any)[
+                        String(d?.severity ?? 'unknown').toLowerCase()
+                      ] ?? 99,
+                  }}
+                  scale={{
+                    x: { type: 'band' },
+                    color: {
+                      domain: ['low', 'medium', 'high', 'critical', 'unknown'],
+                      range: ['#1677ff', '#fadb14', '#fa8c16', '#ff4d4f', '#8c8c8c'],
+                    },
+                  }}
+                  height={320}
+                  label={false}
+                  tooltip={{ showMarkers: false }}
+                  axis={{
+                    x: {
+                      title: false,
+                      labelAutoRotate: true,
+                      labelFormatter: (v: any) => {
+                        const s = String(v ?? '');
+                        if (s.includes('T')) return s.replace('T', ' ') + ':00';
+                        return s;
+                      },
+                    },
+                    y: { title: false },
+                  }}
+                  legend={{ position: 'top' }}
+                />
+              ) : (
+                <Column
+                  data={bucketizeTimeSeries(displayData.alert_score_trend, scoreGroupBy).map((d) => ({ time: d.time, score: d.value }))}
+                  xField="time"
+                  yField="score"
+                  colorField="time"
+                  legend={false}
+                  height={320}
+                  label={false}
+                  tooltip={{ showMarkers: false }}
+                  axis={{ x: false }}
+                />
+              )}
+            </Card>
+          )}
+        </Col>
+      </Row>
+
+      {/* Tables (responsive) */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} md={12} xl={6}>
+          <Card title="Top Source 10 IP">
+            <Table
+              size="small"
+              pagination={false}
+              rowKey={(r) => r.name}
+              columns={[
+                { title: 'IP', dataIndex: 'name' },
+                { title: 'Count', dataIndex: 'count', width: 90 },
+              ]}
+              dataSource={(displayData?.top_source_ips ?? []) as any}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <Card title="Top 10 用户">
+            <Table
+              size="small"
+              pagination={false}
+              rowKey={(r) => r.name}
+              columns={[
+                { title: 'User', dataIndex: 'name' },
+                { title: 'Count', dataIndex: 'count', width: 90 },
+              ]}
+              dataSource={(displayData?.top_users ?? []) as any}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <Card title="Top 10 来源">
+            <Table
+              size="small"
+              pagination={false}
+              rowKey={(r) => r.name}
+              columns={[
+                { title: 'Source', dataIndex: 'name' },
+                { title: 'Count', dataIndex: 'count', width: 90 },
+              ]}
+              dataSource={(displayData?.top_sources ?? []) as any}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <Card title="Top 10 规则">
+            <Table
+              size="small"
+              pagination={false}
+              rowKey={(r) => r.name}
+              columns={[
+                { title: 'Rule', dataIndex: 'name' },
+                { title: 'Count', dataIndex: 'count', width: 90 },
+              ]}
+              dataSource={(displayData?.top_rules ?? []) as any}
             />
           </Card>
         </Col>
       </Row>
-
-      {/* source_index 饼图（AntD Plots Pie） */}
-      {displayData?.source_index && Object.keys(displayData.source_index).length > 0 && (
-        <Card title="Source Index Distribution" style={{ marginTop: 24 }}>
-          <Pie
-            data={Object.entries(displayData.source_index).map(([type, value]) => ({ type: type ?? String(type), value }))}
-            angleField="value"
-            colorField="type"
-            radius={0.8}
-            height={320}
-            label={{
-              text: (d: any) => `${d.type}\n ${d.value}`,
-              position: 'spider',
-            }}
-            legend={{
-              color: {
-                title: false,
-                position: 'right',
-                rowPadding: 5,
-              },
-            }}
-          />
-        </Card>
-      )}
-
-      {/* daily_trend 折线图（AntD Line） */}
-      {displayData?.daily_trend && Object.keys(displayData.daily_trend).length > 0 && (
-        <Card title="Daily Alert Trend" style={{ marginTop: 24 }}>
-          <Line
-            data={Object.entries(displayData.daily_trend).map(([date, count]) => ({ date, count }))}
-            xField="date"
-            yField="count"
-            height={320}
-            point={{ size: 5, shape: 'diamond' }}
-            smooth
-            area={{}}
-          />
-        </Card>
-      )}
-
-      {/* message top10 柱状图（AntD Plots Column，参考DemoColumn样式） */}
-      {displayData?.top_messages && Object.keys(displayData.top_messages).length > 0 && (
-        <Card title="Top 10 Messages" style={{ marginTop: 24 }}>
-          <Column
-            data={Object.entries(displayData.top_messages).slice(0, 10).map(([type, value]) => ({ type, value }))}
-            xField="type"
-            yField="value"
-            colorField="type"
-            height={320}
-            legend={{
-              position: 'right',
-              itemName: {
-                style: {
-                  fontSize: 14,
-                  wordBreak: 'break-all',
-                  maxWidth: 220,
-                },
-              },
-            }}
-            label={false}
-            yAxis={{
-              title: {
-                text: 'Count',
-                style: { fontSize: 14 },
-              },
-            }}
-            tooltip={{ showMarkers: false }}
-            axis={{ x: false }}
-          />
-        </Card>
-      )}
 
       <Modal title="ES Settings" open={esModalVisible} onCancel={() => setEsModalVisible(false)} footer={null}>
         <Form initialValues={esConfig || {enabled: false, hosts: '', index: 'alerts', use_ssl: false, verify_certs: true}} onFinish={onEsSave}>

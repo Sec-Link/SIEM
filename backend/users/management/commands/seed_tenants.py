@@ -7,9 +7,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         demo = [
-            ('alice', 'tenant_a'),
-            ('bob', 'tenant_b'),
-            ('carol', 'tenant_c'),
+            ('alice', 'tenant_1'),
+            ('bob', 'tenant_2'),
+            ('carol', 'tenant_3'),
         ]
         for username, tenant in demo:
             user, created = User.objects.get_or_create(username=username)

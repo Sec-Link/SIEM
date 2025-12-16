@@ -26,24 +26,18 @@ class LoginView(APIView):
             logger.warning("Login failed for username=%s", username)
             return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
         refresh = RefreshToken.for_user(user)
-        # Graceful profile fetch
-        tenant_id = None
         try:
-            tenant_id = user.profile.tenant_id
+            profile = user.profile
         except UserProfile.DoesNotExist:  # type: ignore
             logger.error("User %s has no profile; creating placeholder", user.username)
-            UserProfile.objects.create(user=user, tenant_id='tenant_unassigned')
-            tenant_id = 'tenant_unassigned'
-        # if a tenant override was provided, set it on the user's profile
+            profile = UserProfile.objects.create(user=user, tenant_id='tenant_unassigned')
+
         if tenant_override:
-            try:
-                if tenant_override != tenant_id:
-                    user.profile.tenant_id = tenant_override
-                    user.profile.save()
-                    tenant_id = tenant_override
-                    logger.info('Set tenant_id for user %s to %s via login override', user.username, tenant_override)
-            except Exception as e:
-                logger.warning('Failed to set tenant override for user %s: %s', user.username, e)
+            if profile.tenant_id != tenant_override:
+                profile.tenant_id = tenant_override
+                profile.save(update_fields=['tenant_id'])
+
+        tenant_id = profile.tenant_id
         return Response({
             'access': str(refresh.access_token),
             'refresh': str(refresh),
