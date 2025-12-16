@@ -13,6 +13,7 @@ from requests.auth import HTTPBasicAuth
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 import traceback
+import re
 
 # -----------------------------
 # 中文注释：
@@ -380,6 +381,13 @@ def query_preview(request):
     datasource = payload.get('datasource')
     sql = payload.get('sql')
     limit = int(payload.get('limit') or 200)
+    # New optional params for automatic time injection
+    time_range = payload.get('time_range')  # expected { from: 'ISO', to: 'ISO' }
+    time_field = payload.get('time_field') or payload.get('timestamp_field') or 'time'
+    try:
+        print('DEBUG query_preview payload time_range=', time_range, 'time_field=', time_field)
+    except Exception:
+        pass
 
     ds_instance = None
     # if datasource is an id, load DataSource
@@ -412,9 +420,33 @@ def query_preview(request):
     if not sql or not isinstance(sql, str):
         return Response({'error': 'sql required'}, status=400)
 
-    # 执行 SQL 预览并返回结果。原文件中这段逻辑误置于文件末尾，导致函数没有返回值从而触发 AssertionError。
+    # If time_range provided, inject a parameterized WHERE clause safely.
+    params = {}
+    final_sql = sql
+    if time_range and isinstance(time_range, dict) and time_range.get('from') and time_range.get('to'):
+        # Validate time_field to avoid SQL injection via field name.
+        safe_field = str(time_field or '').strip()
+        # allow names like "table.column" and simple identifiers starting with letter/_ followed by letters, numbers, _ or .
+        if not re.match(r'^[A-Za-z_][A-Za-z0-9_.]*$', safe_field):
+            return Response({'error': 'invalid time_field name'}, status=400)
+
+        # Use parameter names unlikely to collide
+        params['__from'] = time_range.get('from')
+        params['__to'] = time_range.get('to')
+
+        # For robustness with complex SQL (subqueries, unions, etc.) wrap the original SQL as an outer subquery
+        # Strip any trailing semicolons to avoid syntax issues
+        stripped = final_sql.strip()
+        if stripped.endswith(';'):
+            stripped = stripped[:-1]
+
+        # Build outer query that filters on the time field inside the subquery
+        # Use alias __t and qualify the field as __t.<field>
+        # Note: do not add a LIMIT here; let run_query handle 'limit' parameter if supported by adapter
+        final_sql = f"SELECT * FROM ({stripped}) AS __t WHERE __t.{safe_field} >= :__from AND __t.{safe_field} <= :__to"
+
     try:
-        res = run_query(ds_instance, sql=sql, limit=limit, allow_raw=True)
+        res = run_query(ds_instance, sql=final_sql, params=params or None, limit=limit, allow_raw=True)
         return Response(res)
     except Exception as e:
         try:

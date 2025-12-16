@@ -11,4 +11,5 @@ from .models import Dashboard
 class DashboardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Dashboard
-        fields = ['id','name','layout','widgets','created_at','updated_at']
+        fields = ['id','name','layout','widgets','created_at','updated_at',
+                  'timestamp_field','time_selector','timestamp_relative','timestamp_relative_custom_value','timestamp_relative_custom_unit','timestamp_from','timestamp_to']

@@ -13,5 +13,13 @@ class Dashboard(models.Model):
     name = models.CharField(max_length=200)
     layout = models.JSONField(default=dict, blank=True)
     widgets = models.JSONField(default=list, blank=True)
+    # Dashboard-level time selector and timestamp field for SQL filtering
+    timestamp_field = models.CharField(max_length=200, null=True, blank=True)
+    time_selector = models.CharField(max_length=50, null=True, blank=True)
+    timestamp_relative = models.CharField(max_length=50, null=True, blank=True)
+    timestamp_relative_custom_value = models.IntegerField(null=True, blank=True)
+    timestamp_relative_custom_unit = models.CharField(max_length=10, null=True, blank=True)
+    timestamp_from = models.DateTimeField(null=True, blank=True)
+    timestamp_to = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

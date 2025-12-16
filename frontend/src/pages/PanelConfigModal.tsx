@@ -10,15 +10,16 @@
 // 注意事项：
 // - 注释仅为说明和帮助阅读；运行逻辑保持不变
 import React, { useEffect, useState } from 'react'
+import dayjs from 'dayjs'
 import { Modal, Form, Select, Input, Spin, Button, Alert } from 'antd'
 import { listDatasources, queryPreview } from '../api'
 
-export default function PanelConfigModal({ visible, panel, onCancel, onSave }:{ visible:boolean, panel:any, onCancel:Function, onSave:Function }){
+export default function PanelConfigModal({ visible, panel, onCancel, onSave, dashboardTimeRange, dashboardTimestampField }:{ visible:boolean, panel:any, onCancel:Function, onSave:Function, dashboardTimeRange?: [any, any] | null, dashboardTimestampField?: string | null }){
   const [form] = Form.useForm()
 
   // 支持的图表类型列表（参考常见的 @ant-design/charts 类型）
   const CHART_TYPES = [
-    'column','bar','stacked-bar','line','area','pie','scatter','radar','heatmap','box','histogram','treemap','funnel','waterfall','stock','dual-axis','bidirectional-bar','ring-progress','liquid','gauge','sunburst','sankey','word-cloud'
+    'column','bar','stacked-bar','line','area','pie','scatter','radar','heatmap','mitre-attack-heatmap','box','histogram','treemap','funnel','waterfall','stock','dual-axis','bidirectional-bar','ring-progress','liquid','gauge','sunburst','sankey','word-cloud'
   ]
 
   // 不同图表类型需要的字段绑定映射（key 为表单字段名，label 为显示说明）
@@ -28,6 +29,7 @@ export default function PanelConfigModal({ visible, panel, onCancel, onSave }:{ 
     column: [ { key: 'xField', label: 'Category Field' }, { key: 'yField', label: 'Value Field' } ],
     pie: [ { key: 'angleField', label: 'Angle (value) Field' }, { key: 'colorField', label: 'Color (category) Field' } ],
     scatter: [ { key: 'xField', label: 'X Field' }, { key: 'yField', label: 'Y Field' } ],
+    'mitre-attack-heatmap': [ { key: 'techniqueField', label: 'Technique ID Field' }, { key: 'countField', label: 'Count Field' } ],
   }
 
   // 可选字段列表（来自 SQL preview 或 ES mapping）
@@ -64,7 +66,11 @@ export default function PanelConfigModal({ visible, panel, onCancel, onSave }:{ 
       if(sql && dsForSql){
         setLoadingFields(true)
         setSqlLoadError(null)
-        queryPreview({ datasource: dsForSql, sql, limit: 1 }).then((res:any)=>{
+        // if dashboardTimeRange provided, send time_range/time_field to backend for safe injection
+        // dashboardTimeRange may contain dayjs objects; handle toISOString accordingly
+        const time_range = (dashboardTimeRange && dashboardTimeRange[0] && dashboardTimeRange[1]) ? { from: dashboardTimeRange[0].toISOString ? dashboardTimeRange[0].toISOString() : (dashboardTimeRange[0].toString ? String(dashboardTimeRange[0]) : null), to: dashboardTimeRange[1].toISOString ? dashboardTimeRange[1].toISOString() : (dashboardTimeRange[1].toString ? String(dashboardTimeRange[1]) : null) } : undefined
+        const time_field = dashboardTimestampField || undefined
+        queryPreview({ datasource: dsForSql, sql: sql, limit: 1, time_range, time_field }).then((res:any)=>{
           const cols = res.columns || []
           const norm = cols.map((c:any)=> typeof c === 'string' ? { name: c, type: 'string' } : c)
           setAvailableFields(norm || [])
@@ -92,7 +98,9 @@ export default function PanelConfigModal({ visible, panel, onCancel, onSave }:{ 
         setLoadingFields(true)
         setSqlLoadError(null)
         try{
-          const res:any = await queryPreview({ datasource: ds, sql, limit: 1 })
+          const time_range = (dashboardTimeRange && dashboardTimeRange[0] && dashboardTimeRange[1]) ? { from: dashboardTimeRange[0].toISOString ? dashboardTimeRange[0].toISOString() : String(dashboardTimeRange[0]), to: dashboardTimeRange[1].toISOString ? dashboardTimeRange[1].toISOString() : String(dashboardTimeRange[1]) } : undefined
+          const time_field = dashboardTimestampField || undefined
+          const res:any = await queryPreview({ datasource: ds, sql: sql, limit: 1, time_range, time_field })
           if(!mounted) return
           const cols = res.columns || []
           const norm = cols.map((c:any)=> typeof c === 'string' ? { name: c, type: 'string' } : c)
@@ -144,6 +152,9 @@ export default function PanelConfigModal({ visible, panel, onCancel, onSave }:{ 
     mapping.forEach(m=>{ if(values[m.key]) bindings[m.key] = values[m.key] })
     try{
       const newConfig: any = { ...panel.config, title: values.title, datasource: values.datasource, sql: values.sql, fieldBindings: bindings }
+      // persist mitre display preference if present
+      if(values.mitreDisplay){ newConfig.mitreDisplay = values.mitreDisplay }
+      // no demo data helper: panel config should not include demoData
       // 若用户选择 Elasticsearch 集成，则把 esConfig 放回新的 config 中
       if(values.integrationType === 'elasticsearch'){
         newConfig.esConfig = { host: values.esHost, index: values.esIndex, query: values.esQuery }
@@ -196,6 +207,22 @@ export default function PanelConfigModal({ visible, panel, onCancel, onSave }:{ 
           </Select>
         </Form.Item>
 
+          {/* Mitre display mode: show technique name or id */}
+          <Form.Item shouldUpdate noStyle>
+            {()=>{
+              const t = form.getFieldValue('type')
+              if(t !== 'mitre-attack-heatmap') return null
+              return (
+                <Form.Item name="mitreDisplay" label="MITRE Display Mode" initialValue="name">
+                  <Select>
+                    <Select.Option value="name">Technique name (recommended)</Select.Option>
+                    <Select.Option value="id">Technique ID (Txxxx)</Select.Option>
+                  </Select>
+                </Form.Item>
+              )
+            }}
+          </Form.Item>
+
         {/* Elasticsearch integration fields */}
         <Form.Item shouldUpdate noStyle>
           {()=>{
@@ -225,6 +252,8 @@ export default function PanelConfigModal({ visible, panel, onCancel, onSave }:{ 
         <Form.Item name="sql" label="SQL (optional)">
           <Input.TextArea rows={6} placeholder="Enter SQL to run for this panel (overrides dataset)" />
         </Form.Item>
+
+        
 
         {/* Dynamic field bindings for selected chart type */}
         <Form.Item shouldUpdate noStyle>
