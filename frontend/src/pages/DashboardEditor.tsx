@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react'
+import dayjs from 'dayjs'
 import GridLayoutLib, { Layout, WidthProvider } from 'react-grid-layout'
 const GridLayout = WidthProvider(GridLayoutLib)
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
-import { Button, Space, Modal } from 'antd'
-import { Select, message } from 'antd'
+import { Button, Space, Modal, DatePicker, InputNumber } from 'antd'
+import { Select, message, Input } from 'antd'
 import { queryPreview, listDatasources } from '../api'
 import Panel from '../pages/Panel'
 import PanelConfigModal from '../pages/PanelConfigModal'
 import { listDashboards, createDashboard, getDashboard, updateDashboard, deleteDashboard } from '../api'
-import { Column, Line, Pie, Scatter } from '@ant-design/charts'
+import { Column, Bar, Line, Pie, Scatter } from '@ant-design/charts'
+import { MitreAttackHeatmap } from '../chartTypes'
 import { Table } from 'antd'
 
 // 文件级中文说明：
@@ -31,7 +33,43 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
   const [datasources, setDatasources] = useState<any[]>([])
   const [name, setName] = useState<string>('')
   const [description, setDescription] = useState<string>('')
+  const [timestampField, setTimestampField] = useState<string | null>(null)
+  const [timeSelector, setTimeSelector] = useState<string | null>(null)
+  const [timestampRelative, setTimestampRelative] = useState<string | null>(null)
+  const [timestampFrom, setTimestampFrom] = useState<any | null>(null)
+  const [timestampTo, setTimestampTo] = useState<any | null>(null)
+  const [timestampRelativeCustomValue, setTimestampRelativeCustomValue] = useState<number | null>(null)
+  const [timestampRelativeCustomUnit, setTimestampRelativeCustomUnit] = useState<string | null>(null)
   // panels default to simple 'chart' type; removed global chart-type selector
+
+  // Helper to refresh runtimeData for given panels (runs SQL previews where configured)
+  async function refreshPanelsFor(panelsToRefresh: any[], override?: { time_range?: { from: string, to: string } | undefined, time_field?: string | null }){
+    if(!Array.isArray(panelsToRefresh) || panelsToRefresh.length === 0) return
+    for(const p of panelsToRefresh){
+      const sql = p.config?.sql
+      const ds = p.config?.datasource || p.config?.datasourceId || p.config?.dataset
+      if(sql && ds){
+        try{
+            const tr = override && override.time_range ? [override.time_range.from, override.time_range.to] : computeTimeRangeFromSelector()
+            const time_range = tr ? { from: tr[0], to: tr[1] } : undefined
+            const tf = override && Object.prototype.hasOwnProperty.call(override, 'time_field') ? override.time_field : timestampField
+            console.debug('refreshPanelsFor sending time_range', time_range, 'time_field', tf, 'panel', p.i)
+            const previewRes = await queryPreview({ datasource: ds, sql, limit: 200, time_range, time_field: tf })
+          const cols = (previewRes.columns || []).map((c:any)=> typeof c === 'string' ? c : c.name)
+          const rows = previewRes.rows || []
+          const mapped = rows.map((rrow:any[])=>{
+            const obj:any = {}
+            cols.forEach((c:string|any,i:number)=>{ const name = typeof c === 'string' ? c : c.name; obj[name] = rrow[i] })
+            return obj
+          })
+          setPanels(prev=> (Array.isArray(prev) ? prev.map(pp=> pp.i === p.i ? { ...pp, runtimeData: mapped } : pp) : prev))
+        }catch(e:any){
+          console.warn('refreshPanelsFor: preview failed for panel', p.i, e)
+          try{ console.error('preview error response', e?.response?.data) }catch(err){}
+        }
+      }
+    }
+  }
 
   useEffect(()=>{
     // 初始加载：dashboards 列表与可用数据源；若传入 dashboardId 则加载该 dashboard 的 layout 与 panels
@@ -39,17 +77,32 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
     listDatasources().then(r=>setDatasources(r)).catch(()=>setDatasources([]))
     if(dashboardId){
       getDashboard(dashboardId).then(d=>{
-        // 后端返回的 dashboard 对象应包含 layout 与面板配置（此处直接复用 layout 字段作为 panels）
-        setLayout(d.layout || [])
-        setPanels(d.layout || [])
+        // back the persisted timestamp/time selector values first
         setName(d.name || '')
         setDescription(d.description || '')
+        setTimestampField(d.timestamp_field || d.time_field || null)
+        setTimeSelector(d.time_selector || d.timestamp_relative || null)
+        setTimestampRelative(d.timestamp_relative || null)
+        setTimestampFrom(d.timestamp_from ? dayjs(d.timestamp_from) : null)
+        setTimestampTo(d.timestamp_to ? dayjs(d.timestamp_to) : null)
+        setTimestampRelativeCustomValue(d.timestamp_relative_custom_value || null)
+        setTimestampRelativeCustomUnit(d.timestamp_relative_custom_unit || null)
+        // then set panels/layout and refresh panels using the persisted time range
+        setLayout(d.layout || [])
+        const loadedPanels = d.layout || []
+        setPanels(loadedPanels)
+        const loadedTimeRange = (d.timestamp_from && d.timestamp_to) ? { from: d.timestamp_from, to: d.timestamp_to } : undefined
+        const loadedTimeField = d.timestamp_field || d.time_field || null
+        // pass override so refresh uses stored time settings immediately
+        refreshPanelsFor(loadedPanels, { time_range: loadedTimeRange, time_field: loadedTimeField })
       }).catch(()=>{})
     }else{
       // seed example
       const seed = [{ i: '1', x: 0, y: 0, w: 6, h: 6, type: 'chart', config: { title: 'Sample', dataset: null } }]
       setLayout(seed)
       setPanels(seed)
+      // refresh seed panels as well
+      refreshPanelsFor(seed)
     }
   },[dashboardId])
 
@@ -59,6 +112,65 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
       const item = newLayout.find(l=>l.i === p.i)
       return item ? { ...p, x: item.x, y: item.y, w: item.w, h: item.h } : p
     }))
+  }
+
+  // compute from/to ISO strings based on the dashboard-level time selector/fields
+  function computeTimeRangeFromSelector(): [string,string] | null{
+    if(timeSelector === 'absolute'){
+      if(!timestampFrom || !timestampTo) return null
+      const from = (typeof timestampFrom.toISOString === 'function') ? timestampFrom.toISOString() : (dayjs(timestampFrom).toISOString ? dayjs(timestampFrom).toISOString() : String(timestampFrom))
+      const to = (typeof timestampTo.toISOString === 'function') ? timestampTo.toISOString() : (dayjs(timestampTo).toISOString ? dayjs(timestampTo).toISOString() : String(timestampTo))
+      return [from, to]
+    }
+    // presets like '1h','6h','24h','7d'
+    if(typeof timeSelector === 'string' && /^(\d+)([hmd])$/.test(timeSelector)){
+      // interpret unit: h hours, d days, m minutes
+      const m = timeSelector.match(/^(\d+)([hmd])$/)
+      if(!m) return null
+      const v = Number(m[1])
+      const u = m[2]
+      const now = new Date()
+      let from = new Date(now)
+      if(u === 'h') from.setHours(now.getHours() - v)
+      else if(u === 'd') from.setDate(now.getDate() - v)
+      else if(u === 'm') from.setMinutes(now.getMinutes() - v)
+      return [from.toISOString(), now.toISOString()]
+    }
+    if(timeSelector === 'custom_relative' && timestampRelativeCustomValue && timestampRelativeCustomUnit){
+      const now = new Date()
+      const from = new Date(now)
+      const v = Number(timestampRelativeCustomValue)
+      const u = timestampRelativeCustomUnit
+      if(u === 'h') from.setHours(now.getHours() - v)
+      else if(u === 'd') from.setDate(now.getDate() - v)
+      else if(u === 'm') from.setMinutes(now.getMinutes() - v)
+      return [from.toISOString(), now.toISOString()]
+    }
+    // fallback: if timestamp_relative like '1h' stored in timestampRelative
+    if(timestampRelative && /^(\d+)([hmd])$/.test(timestampRelative)){
+      const m = timestampRelative.match(/^(\d+)([hmd])$/)
+      if(!m) return null
+      const v = Number(m[1])
+      const u = m[2]
+      const now = new Date()
+      const from = new Date(now)
+      if(u === 'h') from.setHours(now.getHours() - v)
+      else if(u === 'd') from.setDate(now.getDate() - v)
+      else if(u === 'm') from.setMinutes(now.getMinutes() - v)
+      return [from.toISOString(), now.toISOString()]
+    }
+    return null
+  }
+
+  function applyTimeRangeToSql(sql: string){
+    const tr = computeTimeRangeFromSelector()
+    if(!tr) return sql
+    const from = tr[0]
+    const to = tr[1]
+    let out = sql.replace(/\{\{__from\}\}/g, `'${from}'`).replace(/\{\{__to\}\}/g, `'${to}'`)
+    out = out.replace(/\{\{__time_range\}\}/g, `(${timestampField || 'time'} >= '${from}' AND ${timestampField || 'time'} <= '${to}')`)
+    out = out.replace(/\{\{__time_range:([^}]+)\}\}/g, (_m, fld) => `(${fld} >= '${from}' AND ${fld} <= '${to}')`)
+    return out
   }
 
   function addPanel(){
@@ -103,7 +215,10 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
         const ds = panel.config?.datasource || panel.config?.datasourceId || panel.config?.dataset
         if(sql && ds){
           try{
-            const previewRes = await queryPreview({ datasource: ds, sql, limit: 200 })
+              const tr = computeTimeRangeFromSelector()
+              const time_range = tr ? { from: tr[0], to: tr[1] } : undefined
+              console.debug('saveConfig preview sending time_range', time_range, 'time_field', timestampField, 'panel', panel.i)
+              const previewRes = await queryPreview({ datasource: ds, sql: sql, limit: 200, time_range, time_field: timestampField })
             const cols = (previewRes.columns || []).map((c:any)=> typeof c === 'string' ? c : c.name)
             const rows = previewRes.rows || []
             const mapped = rows.map((rrow:any[])=>{
@@ -120,7 +235,7 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
               else console.error('setPanels not a function when attaching runtimeData', setPanels)
             }catch(err){ console.error('error setting runtimeData panels', err) }
             return
-          }catch(e){ console.warn('sql preview failed', e) }
+          }catch(e:any){ console.warn('sql preview failed', e); try{ console.error('preview error response', e?.response?.data) }catch(err){} }
         }
         // dataset fallback removed — SQL-only flow above handles runtimeData
       }catch(e){ console.warn('panel preview failed', e) }
@@ -128,8 +243,27 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
     setConfigPanel(null)
   }
 
+  // When the dashboard-level timestamp field or time selector changes, refresh all panels
+  useEffect(()=>{
+    // avoid running when no panels
+    if(!panels || panels.length === 0) return
+    // compute current time range and refresh using it
+    (async ()=>{
+      try{
+        await refreshPanelsFor(panels)
+      }catch(e){ console.warn('refresh on time selector change failed', e) }
+    })()
+  },[timestampField, timeSelector, timestampFrom, timestampTo, timestampRelativeCustomValue, timestampRelativeCustomUnit, timestampRelative])
+
   async function handleSave(){
-    const payload = { name: name || 'Unnamed', description: description || '', layout: panels }
+    const payload: any = { name: name || 'Unnamed', description: description || '', layout: panels }
+    if(timestampField) payload.timestamp_field = timestampField
+    if(timeSelector) payload.time_selector = timeSelector
+    if(timestampRelative) payload.timestamp_relative = timestampRelative
+    if(timestampRelativeCustomValue) payload.timestamp_relative_custom_value = timestampRelativeCustomValue
+    if(timestampRelativeCustomUnit) payload.timestamp_relative_custom_unit = timestampRelativeCustomUnit
+    if(timestampFrom) payload.timestamp_from = typeof timestampFrom.toISOString === 'function' ? timestampFrom.toISOString() : String(timestampFrom)
+    if(timestampTo) payload.timestamp_to = typeof timestampTo.toISOString === 'function' ? timestampTo.toISOString() : String(timestampTo)
     try{
       if(dashboardId){
         await updateDashboard(dashboardId, payload)
@@ -170,6 +304,29 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
             <div style={{ fontWeight: 700 }}>{name || 'Unnamed Dashboard'}</div>
           )}
           <input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Description" style={{ padding: 8, borderRadius: 6, border: '1px solid #ddd', width: 360 }} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Input placeholder="Timestamp field (optional)" value={timestampField ?? ''} onChange={e=>setTimestampField(e.target.value || null)} style={{ width: 200 }} />
+            <Select style={{ width: 160 }} allowClear placeholder="Time range" value={timeSelector ?? undefined} onChange={(val:any)=>{
+              setTimeSelector(val || null)
+              // keep legacy fields in sync
+              if(val === 'absolute'){
+                setTimestampRelative(null)
+                setTimestampFrom(null)
+                setTimestampTo(null)
+              } else if(val === 'custom_relative'){
+                setTimestampRelative('custom')
+              } else {
+                setTimestampRelative(val)
+              }
+            }}>
+              <Select.Option value="1h">Last 1 hour</Select.Option>
+              <Select.Option value="6h">Last 6 hours</Select.Option>
+              <Select.Option value="24h">Last 24 hours</Select.Option>
+              <Select.Option value="7d">Last 7 days</Select.Option>
+              <Select.Option value="custom_relative">Custom relative</Select.Option>
+              <Select.Option value="absolute">Absolute (pick timestamps)</Select.Option>
+            </Select>
+          </div>
         </div>
         <Space>
           <Button onClick={()=>setIsEditMode(m=>!m)}>{isEditMode ? 'Exit Edit' : 'Enter Edit'}</Button>
@@ -178,6 +335,25 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
           <Button type="primary" onClick={handleSave}>Save Layout</Button>
           <Button onClick={onBack}>Back to List</Button>
         </Space>
+      </div>
+      {/* Render absolute/custom controls */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+        {timeSelector === 'absolute' ? (
+          <>
+            <DatePicker showTime value={timestampFrom ?? undefined} onChange={(d:any)=>setTimestampFrom(d ?? null)} />
+            <DatePicker showTime value={timestampTo ?? undefined} onChange={(d:any)=>setTimestampTo(d ?? null)} />
+          </>
+        ) : null}
+        {timeSelector === 'custom_relative' ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <InputNumber min={1} value={timestampRelativeCustomValue ?? undefined} onChange={(v:any)=>setTimestampRelativeCustomValue(v ?? null)} />
+            <Select value={timestampRelativeCustomUnit ?? undefined} onChange={(v:any)=>setTimestampRelativeCustomUnit(v ?? null)} style={{ width: 120 }}>
+              <Select.Option value="m">minutes</Select.Option>
+              <Select.Option value="h">hours</Select.Option>
+              <Select.Option value="d">days</Select.Option>
+            </Select>
+          </div>
+        ) : null}
       </div>
 
       <div style={{ border: '1px dashed #ddd', padding: 0, borderRadius: 8, width: '100%' }}>
@@ -191,7 +367,7 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
                   <div style={{ width: '100%', height: '100%' }}>
                     {p.type === 'chart' || (p.type && p.type !== 'table' && p.type !== 'text' && p.type !== 'image') ? (
                           (() => {
-                            const raw = (p.runtimeData && p.runtimeData.length>0) ? p.runtimeData : (p.config?.demoData || [{ name: 'A', value: 10 }, { name: 'B', value: 20 }])
+                            const raw = (p.runtimeData && p.runtimeData.length>0) ? p.runtimeData : []
                             const data = Array.isArray(raw) ? raw : (raw ? [raw] : [])
                             const bindings = p.config?.fieldBindings || {}
                             const chartType = p.config?.chartType || p.type || 'column'
@@ -205,10 +381,25 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
                                   return <Pie data={data} angleField={bindings.angleField || 'value'} colorField={bindings.colorField || detectedX} height={size.height} width={size.width} />
                                 case 'scatter':
                                   return <Scatter data={data} xField={bindings.xField || 'x'} yField={bindings.yField || 'y'} height={size.height} width={size.width} />
-                                case 'bar':
+                                case 'bar': {
+                                  const barX = bindings.xField || 'value'
+                                  const barY = bindings.yField || detectedX
+                                  return <Bar data={data} xField={barX} yField={barY} height={size.height} width={size.width} />
+                                }
                                 case 'column':
                                 default:
                                   return <Column data={data} xField={bindings.xField || detectedX} yField={bindings.yField || 'value'} height={size.height} width={size.width} />
+                                  case 'mitre-attack-heatmap':
+                                    // build aggRows from runtimeData using configured field bindings
+                                    try{
+                                      const techField = bindings.techniqueField || 'technique_id' || 'technique'
+                                      const cntField = bindings.countField || 'count' || 'value'
+                                      const aggRows = Array.isArray(data) ? data.map((r:any)=> ({ technique_id: r[techField] ?? r['technique_id'] ?? r['technique'], count: Number(r[cntField] ?? r['count'] ?? r['value'] ?? 0) })) : []
+                                      const displayMode = p.config?.mitreDisplay || 'name'
+                                      return <MitreAttackHeatmap aggRows={aggRows} displayMode={displayMode} />
+                                    }catch(e){
+                                      return <MitreAttackHeatmap aggRows={[]} />
+                                    }
                               }
                             }catch(e){
                               // fallback to basic column
@@ -235,7 +426,13 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
         </GridLayout>
       </div>
 
-      <PanelConfigModal visible={!!configPanel} panel={configPanel} onCancel={()=>setConfigPanel(null)} onSave={saveConfig} />
+      {
+        (()=>{
+          const tr = computeTimeRangeFromSelector()
+          const asDates = tr ? ([dayjs(tr[0]), dayjs(tr[1])] as [any, any]) : null
+          return <PanelConfigModal visible={!!configPanel} panel={configPanel} onCancel={()=>setConfigPanel(null)} onSave={saveConfig} dashboardTimeRange={asDates} dashboardTimestampField={timestampField} />
+        })()
+      }
       <Modal
         title="Create Panel from SQL"
         open={sqlModalVisible}
@@ -245,7 +442,10 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
           if(!sqlDatasource || !sqlText){ message.error('请选择数据源并输入 SQL'); return }
           message.loading({ content: 'Running SQL preview...', key: 'sqlPreview' })
           try{
-            const res = await queryPreview({ datasource: sqlDatasource, sql: sqlText, limit: 200 })
+            const tr = computeTimeRangeFromSelector()
+            const time_range = tr ? { from: tr[0], to: tr[1] } : undefined
+            console.debug('SQL modal preview sending time_range', time_range, 'time_field', timestampField)
+            const res = await queryPreview({ datasource: sqlDatasource, sql: sqlText, limit: 200, time_range, time_field: timestampField })
             console.log('queryPreview result', res)
             const cols = res.columns || []
             const rows = res.rows || []
@@ -277,6 +477,7 @@ export default function DashboardEditor({ dashboardId, onBack }:{ dashboardId?:s
             message.success({ content: 'Panel created from SQL', key: 'sqlPreview' })
           }catch(e:any){
             console.error('SQL preview failed', e)
+            try{ console.error('SQL modal preview response', e?.response?.data) }catch(err){}
             message.error({ content: `SQL preview failed: ${e?.message || e}`, key: 'sqlPreview' })
           }
         }}

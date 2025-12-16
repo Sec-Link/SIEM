@@ -1,5 +1,5 @@
 try:
-    from sqlalchemy import create_engine, inspect
+    from sqlalchemy import create_engine, inspect, text
     from sqlalchemy.exc import SQLAlchemyError
     _HAS_SQLALCHEMY = True
 except Exception:
@@ -155,8 +155,28 @@ def run_query(ds, *, table=None, sql=None, params=None, limit=200, aggregation=N
         if not allow_raw:
             raise RuntimeError('raw SQL execution disabled')
         with engine.connect() as conn:
-            res = conn.exec_driver_sql(sql, params or {})
-            cols = [c[0] for c in res.cursor.description] if getattr(res, 'cursor', None) else []
+            # If params provided, prefer SQLAlchemy text() which will compile named binds
+            # to the correct DBAPI param style (e.g. psycopg2 expects %(name)s).
+            if params:
+                res = conn.execute(text(sql), params)
+            else:
+                # exec_driver_sql can be used for simple non-parameterized SQL
+                try:
+                    res = conn.exec_driver_sql(sql)
+                except Exception:
+                    # Fallback to execute(text(sql)) for broader compatibility
+                    res = conn.execute(text(sql))
+
+            # Extract column names in a SQLAlchemy-version-agnostic way
+            cols = []
+            try:
+                if hasattr(res, 'keys'):
+                    cols = list(res.keys())
+                elif getattr(res, 'cursor', None):
+                    cols = [c[0] for c in res.cursor.description]
+            except Exception:
+                cols = []
+
             rows = [list(r) for r in res]
             return {'columns': cols, 'rows': rows}
 

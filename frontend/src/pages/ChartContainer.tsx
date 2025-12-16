@@ -49,8 +49,8 @@ export default function ChartContainer({ children, onSize }: { children: (size: 
   }, [onSize])
 
   return (
-    <div ref={ref} style={{ width: '100%', height: '100%', boxSizing: 'border-box', minHeight: 0 }}>
-      {children(size)}
+    <div ref={ref} style={{ width: '100%', height: '100%', boxSizing: 'border-box', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>{children(size)}</div>
     </div>
   )
 }

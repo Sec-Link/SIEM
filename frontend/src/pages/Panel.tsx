@@ -59,13 +59,13 @@ export default function Panel({ panel, onConfigure, onRemove, children, isEditMo
         </div>
       </div>
 
-      <div className="panel-content no-drag" style={{ flex: 1, minHeight: 0, display: 'block' }}>
+      <div className="panel-content no-drag" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* 使用 ChartContainer 获取容器精确尺寸并传给 children 渲染函数。
             为了兼容以前的用法，如果 children 是普通 ReactNode，则直接渲染在一个自适应容器中。 */}
         {typeof children === 'function' ? (
           <ChartContainer>
             {(size)=> (
-              <div style={{ width: '100%', height: '100%' }}>
+              <div style={{ width: '100%', height: '100%', overflow: 'auto' }}>
                 {children(size)}
               </div>
             )}
