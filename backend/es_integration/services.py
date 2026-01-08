@@ -17,6 +17,7 @@ import urllib.request
 import urllib.error
 import base64
 import time
+import threading
 
 import requests
 
@@ -461,9 +462,19 @@ class AlertService:
         force_mock: bool = False,
         force_db: bool = False,
     ) -> Tuple[List[Dict], str]:
-        """Return (alerts, source) where source is 'db', 'es', 'es-http' or 'mock'."""
+        """Return (alerts, source) where source is 'db', 'es', 'es-http' or 'mock'.
+
+        Note: this method is instrumented with timing logs to help diagnose slow
+        fetches; DB upserts are performed on a background thread to avoid
+        blocking the response when talking to ES.
+        """
+        start_time = time.time()
+        logger.info('list_alerts_for_tenant start tenant=%s force_es=%s force_db=%s', tenant_id, force_es, force_db)
+
         if force_mock:
             alerts = AlertService.load_mock_alerts()
+            elapsed = int((time.time() - start_time) * 1000)
+            logger.info('list_alerts_for_tenant mock return tenant=%s count=%d elapsed_ms=%d', tenant_id, len(alerts), elapsed)
             return [a for a in alerts if a['tenant_id'] == tenant_id], 'mock'
 
         # Force DB means: never hit ES, return only cached DB rows (may be empty).
@@ -473,6 +484,8 @@ class AlertService:
                     Alert.objects.filter(tenant_id=tenant_id)
                     .order_by('-timestamp')[:100]
                 )
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                logger.info('list_alerts_for_tenant force_db tenant=%s cached_count=%d elapsed_ms=%d', tenant_id, len(cached), elapsed_ms)
                 return [_serialize_alert_row(r) for r in cached], 'db'
             except Exception as e:
                 logger.exception('DB read failed in force_db mode (tenant=%s): %s', tenant_id, e)
@@ -485,6 +498,8 @@ class AlertService:
                     .order_by('-timestamp')[:100]
                 )
                 if cached:
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    logger.info('list_alerts_for_tenant db cache hit tenant=%s cached_count=%d elapsed_ms=%d', tenant_id, len(cached), elapsed_ms)
                     return [_serialize_alert_row(r) for r in cached], 'db'
             except Exception as e:
                 logger.exception('DB read failed, falling back to ES/mock: %s', e)
@@ -537,9 +552,11 @@ class AlertService:
                             body['sort'] = [{resolved_sort_field: {"order": "desc"}}]
                         res = es.search(index=cfg.index, body=body, request_timeout=30)
                         hits = [h.get('_source', {}) for h in res.get('hits', {}).get('hits', [])]
-                        logger.info('Fetched %d alerts from ES for tenant %s', len(hits), tenant_id)
+                        elapsed_ms = int((time.time() - start_time) * 1000)
+                        logger.info('Fetched %d alerts from ES for tenant %s elapsed_ms=%d', len(hits), tenant_id, elapsed_ms)
                         try:
-                            _upsert_docs_to_db(hits)
+                            # perform DB upsert asynchronously to avoid adding latency to the response
+                            threading.Thread(target=_upsert_docs_to_db, args=(hits,), daemon=True).start()
                         except Exception:
                             logger.exception('Best-effort DB upsert failed (source=es)')
                         return hits, 'es'
@@ -553,9 +570,10 @@ class AlertService:
                     body['sort'] = [{resolved_sort_field: {"order": "desc"}}]
                 hits = _http_search(cfg, body, timeout=30)
                 if hits:
-                    logger.info('Fetched %d alerts from ES via HTTP fallback for tenant %s', len(hits), tenant_id)
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    logger.info('Fetched %d alerts from ES via HTTP fallback for tenant %s elapsed_ms=%d', len(hits), tenant_id, elapsed_ms)
                     try:
-                        _upsert_docs_to_db(hits)
+                        threading.Thread(target=_upsert_docs_to_db, args=(hits,), daemon=True).start()
                     except Exception:
                         logger.exception('Best-effort DB upsert failed (source=es-http)')
                     return hits, 'es-http'

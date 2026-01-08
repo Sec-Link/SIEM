@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { Pie } from '@ant-design/charts';
 import { Column } from '@ant-design/plots';
-import { Card, Statistic, Row, Col, Space, Select, Button, Modal, Form, Input, Switch, message, Spin, Table } from 'antd';
+import { Card, Statistic, Row, Col, Space, Select, Button, Modal, Form, Input, Switch, message, Spin, Table, Empty } from 'antd';
 import { fetchDashboard, syncAlertsToDb, getESConfig, setESConfig, getWebhookConfig, setWebhookConfig } from '../api';
 import ModeContext from '../modeContext';
 import { DashboardData } from '../types';
@@ -28,6 +28,16 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [trendGroupBy, setTrendGroupBy] = useState<'hour' | 'day'>('hour');
   const [scoreGroupBy, setScoreGroupBy] = useState<'hour' | 'day'>('hour');
+  // Debug helpers to inspect raw displayData when trends show no data
+  const [debugModalVisible, setDebugModalVisible] = useState(false);
+  const [debugKey, setDebugKey] = useState<string | null>(null);
+  const openDebugModal = (key: string | null) => { setDebugKey(key); setDebugModalVisible(true); };
+  const getDebugContent = () => {
+    if (!displayData) return 'No displayData (dashboard failed to load)';
+    if (debugKey === 'alert_trend') return JSON.stringify({ alert_trend: displayData.alert_trend, alert_trend_series: displayData.alert_trend_series }, null, 2);
+    if (debugKey === 'alert_score_trend') return JSON.stringify({ alert_score_trend: displayData.alert_score_trend, alert_score_trend_series: displayData.alert_score_trend_series }, null, 2);
+    return JSON.stringify(displayData, null, 2);
+  };
 
   const bucketizeTimeSeries = (
     series: Record<string, number> | undefined,
@@ -101,6 +111,8 @@ const Dashboard: React.FC = () => {
       // only update the displayData when we successfully fetched something
       if (res) {
         setDisplayData(res);
+        // debug: log keys present in response (helpful to check if trend fields exist)
+        try { console.debug('Dashboard load: available keys', Object.keys(res || {})); } catch (e) {}
         // cache for faster next-loads
         try {
           localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: res }));
@@ -346,7 +358,7 @@ const Dashboard: React.FC = () => {
           )}
         </Col>
         <Col xs={24} lg={14}>
-          {displayData?.alert_trend && Object.keys(displayData.alert_trend).length > 0 && (
+          {displayData && (
             <Card
               title="告警趋势"
               extra={
@@ -362,6 +374,7 @@ const Dashboard: React.FC = () => {
                       { label: '1 day', value: 'day' },
                     ]}
                   />
+                  <Button size="small" onClick={() => openDebugModal('alert_trend')}>View data</Button>
                 </Space>
               }
             >
@@ -407,7 +420,7 @@ const Dashboard: React.FC = () => {
                   }}
                   legend={{ position: 'top' }}
                 />
-              ) : (
+              ) : (displayData?.alert_trend && Object.keys(displayData.alert_trend).length > 0) ? (
                 <Column
                   data={bucketizeTimeSeries(displayData.alert_trend, trendGroupBy).map((d) => ({ time: d.time, count: d.value }))}
                   xField="time"
@@ -419,6 +432,10 @@ const Dashboard: React.FC = () => {
                   tooltip={{ showMarkers: false }}
                   axis={{ x: false }}
                 />
+              ) : (
+                <div style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Empty description="No trend data" />
+                </div>
               )}
             </Card>
           )}
@@ -443,7 +460,7 @@ const Dashboard: React.FC = () => {
           )}
         </Col>
         <Col xs={24} lg={14}>
-          {displayData?.alert_score_trend && Object.keys(displayData.alert_score_trend).length > 0 && (
+          {displayData && (
             <Card
               title="告警分数趋势"
               extra={
@@ -459,6 +476,7 @@ const Dashboard: React.FC = () => {
                       { label: '1 day', value: 'day' },
                     ]}
                   />
+                  <Button size="small" onClick={() => openDebugModal('alert_score_trend')}>View data</Button>
                 </Space>
               }
             >
@@ -503,7 +521,7 @@ const Dashboard: React.FC = () => {
                   }}
                   legend={{ position: 'top' }}
                 />
-              ) : (
+              ) : (displayData?.alert_score_trend && Object.keys(displayData.alert_score_trend).length > 0) ? (
                 <Column
                   data={bucketizeTimeSeries(displayData.alert_score_trend, scoreGroupBy).map((d) => ({ time: d.time, score: d.value }))}
                   xField="time"
@@ -515,6 +533,10 @@ const Dashboard: React.FC = () => {
                   tooltip={{ showMarkers: false }}
                   axis={{ x: false }}
                 />
+              ) : (
+                <div style={{ height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Empty description="No trend data" />
+                </div>
               )}
             </Card>
           )}
@@ -580,6 +602,10 @@ const Dashboard: React.FC = () => {
           </Card>
         </Col>
       </Row>
+
+      <Modal title={`Raw dashboard data ${debugKey ? ` - ${debugKey}` : ''}`} open={debugModalVisible} onCancel={() => setDebugModalVisible(false)} footer={<Button onClick={() => setDebugModalVisible(false)}>Close</Button>} width={800}>
+        <pre style={{ maxHeight: '60vh', overflow: 'auto', whiteSpace: 'pre-wrap' }}>{getDebugContent()}</pre>
+      </Modal>
 
       <Modal title="ES Settings" open={esModalVisible} onCancel={() => setEsModalVisible(false)} footer={null}>
         <Form initialValues={esConfig || {enabled: false, hosts: '', index: 'alerts', use_ssl: false, verify_certs: true}} onFinish={onEsSave}>

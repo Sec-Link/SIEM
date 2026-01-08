@@ -37,6 +37,9 @@ export async function login(username: string, password: string, tenant_id?: stri
     // persist token for page reloads
     localStorage.setItem('siem_access_token', res.data.access);
     if (res.data.tenant_id) localStorage.setItem('siem_tenant_id', res.data.tenant_id);
+    // store username for UI display (fall back to provided username)
+    if (res.data.username) localStorage.setItem('siem_username', res.data.username);
+    else if (username) localStorage.setItem('siem_username', username);
   } catch (err) {
     // ignore storage errors
   }
