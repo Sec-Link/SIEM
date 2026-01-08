@@ -5,7 +5,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Task, TaskRun
-from .serializers import TaskSerializer, TaskRunSerializer
+from .serializers import TaskSerializer, TaskRunSerializer, TaskRequestLogSerializer
+from .models import TaskRequestLog
 from integrations.views import sync_es_to_db
 from integrations.models import Integration
 from django.utils import timezone
@@ -38,7 +39,8 @@ class TaskViewSet(viewsets.ModelViewSet):
         self._generate_task_files(task)
         # persist the incoming request payload to disk for auditing/debug
         try:
-            self._write_task_request_log(self.request.data, task)
+            # Persist audit log to database instead of writing to disk
+            TaskRequestLog.objects.create(task=task, user=str(self.request.user) if getattr(self.request, 'user', None) else None, request_body=self.request.data)
         except Exception:
             pass
 
@@ -47,7 +49,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         self._generate_task_files(task)
         # persist update payload
         try:
-            self._write_task_request_log(self.request.data, task)
+            TaskRequestLog.objects.create(task=task, user=str(self.request.user) if getattr(self.request, 'user', None) else None, request_body=self.request.data)
         except Exception:
             pass
 
@@ -65,44 +67,73 @@ class TaskViewSet(viewsets.ModelViewSet):
                 'task_name': tname,
                 'request_body': request_data,
             }
-            with open(path, 'w', encoding='utf-8') as f:
-                json.dump(payload, f, indent=2, ensure_ascii=False)
+            # For backward compatibility keep a disk copy if configured
+            try:
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump(payload, f, indent=2, ensure_ascii=False)
+            except Exception:
+                # ignore disk write errors
+                pass
             return path
         except Exception:
             return None
 
     def _generate_task_files(self, task: Task):
-        # write config JSON
-        cfg_path = os.path.join(GENERATED_DIR, f"task_{task.id}.json")
-        with open(cfg_path, 'w', encoding='utf-8') as f:
-            json.dump({'id': str(task.id), 'name': task.name, 'type': task.task_type, 'config': task.config}, f, indent=2)
+        # write config JSON to disk only if enabled. Task.config remains the primary persistent source.
+        try:
+            from django.conf import settings as _dj_settings
+            if getattr(_dj_settings, 'WRITE_CONFIG_TO_DISK', False):
+                cfg_path = os.path.join(GENERATED_DIR, f"task_{task.id}.json")
+                try:
+                    with open(cfg_path, 'w', encoding='utf-8') as f:
+                        json.dump({'id': str(task.id), 'name': task.name, 'type': task.task_type, 'config': task.config}, f, indent=2)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
         # generate a generic task runner shell script (executes appropriate tool based on task type)
         runner_sh = os.path.join(GENERATED_DIR, f"task_runner_{task.id}.sh")
         if task.task_type == 'logstash':
             # assume Logstash is available on PATH; run logstash with generated config
             conf_path = os.path.join(GENERATED_DIR, f"logstash_{task.id}.conf")
-            with open(conf_path, 'w', encoding='utf-8') as fconf:
-                # naive rendering: for tasks with config.inputs/filters/outputs
-                cfg = task.config or {}
-                ins = cfg.get('inputs', [])
-                fil = cfg.get('filters', [])
-                outs = cfg.get('outputs', [])
-                for i in ins:
-                    fconf.write(f"input {{ {i.get('type')} {{ {i.get('path','')} }} }}\n")
-                for ff in fil:
-                    fconf.write(f"filter {{ {ff.get('type')} {{ {ff.get('pattern','')} }} }}\n")
-                for o in outs:
-                    fconf.write(f"output {{ {o.get('type')} {{ {o.get('config','')} }} }}\n")
-            runner_content = f"#!/bin/sh\necho Running logstash for task {task.id}\nlogstash -f {conf_path}\n"
+            try:
+                from django.conf import settings as _dj_settings
+                write_disk = getattr(_dj_settings, 'WRITE_CONFIG_TO_DISK', False)
+            except Exception:
+                write_disk = False
+            if write_disk:
+                try:
+                    with open(conf_path, 'w', encoding='utf-8') as fconf:
+                        # naive rendering: for tasks with config.inputs/filters/outputs
+                        cfg = task.config or {}
+                        ins = cfg.get('inputs', [])
+                        fil = cfg.get('filters', [])
+                        outs = cfg.get('outputs', [])
+                        for i in ins:
+                            fconf.write(f"input {{ {i.get('type')} {{ {i.get('path','')} }} }}\n")
+                        for ff in fil:
+                            fconf.write(f"filter {{ {ff.get('type')} {{ {ff.get('pattern','')} }} }}\n")
+                        for o in outs:
+                            fconf.write(f"output {{ {o.get('type')} {{ {o.get('config','')} }} }}\n")
+                except Exception:
+                    pass
+                runner_content = f"#!/bin/sh\necho Running logstash for task {task.id}\nlogstash -f {conf_path}\n"
+            else:
+                runner_content = f"#!/bin/sh\necho Running logstash for task {task.id} (no conf file written)\n"
         else:
             runner_content = f"#!/bin/sh\necho Running task {task.id} (type: {task.task_type})\necho Config file: {cfg_path}\ncat {cfg_path}\n"
 
-        with open(runner_sh, 'w', encoding='utf-8') as fr:
-            fr.write(runner_content)
-        # make executable if possible
         try:
-            os.chmod(runner_sh, 0o755)
+            from django.conf import settings as _dj_settings
+            if getattr(_dj_settings, 'WRITE_CONFIG_TO_DISK', False):
+                with open(runner_sh, 'w', encoding='utf-8') as fr:
+                    fr.write(runner_content)
+                # make executable if possible
+                try:
+                    os.chmod(runner_sh, 0o755)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -121,3 +152,8 @@ class TaskViewSet(viewsets.ModelViewSet):
 class TaskRunViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = TaskRun.objects.all().order_by('-started_at')
     serializer_class = TaskRunSerializer
+
+
+class TaskRequestLogViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = TaskRequestLog.objects.all().order_by('-logged_at')
+    serializer_class = TaskRequestLogSerializer

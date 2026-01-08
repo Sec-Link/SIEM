@@ -38,7 +38,15 @@ const Integrations: React.FC = () =>{
 
   const testIntegration = async (info: any) => {
     const type = info.type || 'elasticsearch'
-    if(type === 'elasticsearch') return testEsIntegration(info)
+    if(type === 'elasticsearch'){
+      // Normalize payload: prefer explicit host/url, fall back to config.host
+      const host = info.host || info.url || (info.config && info.config.host) || ''
+      const username = info.username || info.user || (info.config && info.config.username) || ''
+      const password = info.password || (info.config && info.config.password) || ''
+      const path = info.path || (info.config && info.config.path) || '/_cluster/health'
+      if(!host) throw new Error('Elasticsearch host required')
+      return testEsIntegration({ host, username, password, path })
+    }
     if(type === 'logstash') return testLogstashIntegration(info)
     if(type === 'airflow') return testAirflowIntegration(info)
     if(type === 'postgresql' || type === 'mysql'){
@@ -153,7 +161,7 @@ const Integrations: React.FC = () =>{
     const merged: any = { ...copy }
     if(copy.type === 'logstash') merged.config = copy.config
     else{
-      merged.host = copy.config.host
+      merged.host = copy.config.host || copy.config.url || undefined
       merged.username = copy.config.username
       merged.password = copy.config.password
       merged.token = copy.config.token

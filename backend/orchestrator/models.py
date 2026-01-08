@@ -47,3 +47,16 @@ class TaskRun(models.Model):
 
     def __str__(self):
         return f"Run {self.id} - {self.status}"
+
+
+class TaskRequestLog(models.Model):
+    """存储创建/更新 Task 时 API 请求的审计日志，替代磁盘上的 JSON 文件写入。"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    task = models.ForeignKey(Task, null=True, blank=True, on_delete=models.SET_NULL)
+    user = models.CharField(max_length=200, null=True, blank=True)
+    logged_at = models.DateTimeField(auto_now_add=True)
+    request_body = models.JSONField(default=dict)
+
+    def __str__(self):
+        tid = getattr(self.task, 'id', None)
+        return f"TaskRequestLog({tid}) @ {self.logged_at.isoformat()}"

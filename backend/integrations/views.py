@@ -19,6 +19,9 @@ import datetime
 # Helper to write a detailed sync debug log when sync fails or imports zero rows.
 def _write_sync_debug_log(index, mapping_columns, docs, extraction_results=None, errors=None, exc_tb=None, name=None):
     try:
+        from django.conf import settings as _dj_settings
+        if not getattr(_dj_settings, 'WRITE_CONFIG_TO_DISK', False):
+            return None
         out_dir = os.path.join(os.path.dirname(__file__), 'es_mappings', 'sync_logs')
         os.makedirs(out_dir, exist_ok=True)
         ts = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
@@ -108,43 +111,53 @@ def sync_es_to_db(es_integration: Integration, index: str, dest_integration: Int
             imported = 0
             errors = []
             table = dest_cfg.get('table') or 'es_imports'
-            # Determine mapping columns: prefer a saved mapping file for this index, fall back to integration config
+            # Determine mapping columns: first try persisted ESMapping model, then file-backed mappings_dir, finally integration config
             mapping_columns = None
             try:
-                import os, json
-                mappings_dir = os.path.join(os.path.dirname(__file__), 'es_mappings')
-                # prefer a mapping file that was saved for the target table name
-                if os.path.isdir(mappings_dir):
-                    for fn in os.listdir(mappings_dir):
-                        if not fn.lower().endswith('.json'):
-                            continue
-                        fp = os.path.join(mappings_dir, fn)
-                        try:
-                            with open(fp, 'r', encoding='utf-8') as fh:
-                                data = json.load(fh)
-                            # file format may include: { index: <index>, table: <table>, columns: [...] }
-                            if isinstance(data, dict) and data.get('table') == table and isinstance(data.get('columns'), list):
-                                mapping_columns = data.get('columns')
-                                break
-                        except Exception:
-                            continue
-                # fallback to index-named mapping file if no table-specific mapping found
-                if not mapping_columns and os.path.isdir(mappings_dir):
-                    for fn in os.listdir(mappings_dir):
-                        if not fn.lower().endswith('.json'):
-                            continue
-                        fp = os.path.join(mappings_dir, fn)
-                        try:
-                            with open(fp, 'r', encoding='utf-8') as fh:
-                                data = json.load(fh)
-                            # older files may only include index -> columns
-                            if isinstance(data, dict) and data.get('index') == index and isinstance(data.get('columns'), list):
-                                mapping_columns = data.get('columns')
-                                break
-                        except Exception:
-                            continue
+                from .models import ESMapping
+                try:
+                    em = ESMapping.objects.filter(index=index, table=table).first()
+                    if em:
+                        mapping_columns = em.columns
+                except Exception:
+                    mapping_columns = None
             except Exception:
                 mapping_columns = None
+            # fallback to reading mapping files on disk when DB mapping not available
+            if not mapping_columns:
+                try:
+                    import os, json
+                    mappings_dir = os.path.join(os.path.dirname(__file__), 'es_mappings')
+                    # prefer a mapping file that was saved for the target table name
+                    if os.path.isdir(mappings_dir):
+                        for fn in os.listdir(mappings_dir):
+                            if not fn.lower().endswith('.json'):
+                                continue
+                            fp = os.path.join(mappings_dir, fn)
+                            try:
+                                with open(fp, 'r', encoding='utf-8') as fh:
+                                    data = json.load(fh)
+                                if isinstance(data, dict) and data.get('table') == table and isinstance(data.get('columns'), list):
+                                    mapping_columns = data.get('columns')
+                                    break
+                            except Exception:
+                                continue
+                    # fallback to index-named mapping file if no table-specific mapping found
+                    if not mapping_columns and os.path.isdir(mappings_dir):
+                        for fn in os.listdir(mappings_dir):
+                            if not fn.lower().endswith('.json'):
+                                continue
+                            fp = os.path.join(mappings_dir, fn)
+                            try:
+                                with open(fp, 'r', encoding='utf-8') as fh:
+                                    data = json.load(fh)
+                                if isinstance(data, dict) and data.get('index') == index and isinstance(data.get('columns'), list):
+                                    mapping_columns = data.get('columns')
+                                    break
+                            except Exception:
+                                continue
+                except Exception:
+                    mapping_columns = None
             # fallback to integration config if no mapping file found
             if not mapping_columns:
                 mapping_columns = dest_cfg.get('columns') or None
@@ -591,11 +604,20 @@ def test_es_connection(request):
     Returns: { ok: true, status: 200, body: '...', headers: { ... } } or error details.
     """
     payload = request.data or {}
-    host = payload.get('host')
+    # accept host in several common keys for flexibility
+    host = payload.get('host') or payload.get('url') or (payload.get('config') and payload.get('config').get('host'))
+    try:
+        print('DEBUG test_es_connection payload:', payload)
+    except Exception:
+        pass
     if not host:
         return Response({'ok': False, 'error': 'host required'}, status=status.HTTP_400_BAD_REQUEST)
     path = payload.get('path') or '/_cluster/health'
-    url = host.rstrip('/') + path
+    url = str(host).rstrip('/') + path
+    try:
+        print('DEBUG test_es_connection computed url:', url)
+    except Exception:
+        pass
     auth = None
     username = payload.get('username')
     password = payload.get('password')
@@ -605,12 +627,23 @@ def test_es_connection(request):
         resp = requests.get(url, timeout=10, auth=auth)
     except requests.exceptions.RequestException as e:
         return Response({'ok': False, 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
     body = None
     try:
         body = resp.text
     except Exception:
         body = None
     headers = dict(resp.headers)
+
+    # Treat non-2xx responses from ES as errors and surface details to the client
+    if resp.status_code >= 400:
+        parsed = body
+        try:
+            parsed = resp.json()
+        except Exception:
+            pass
+        return Response({'ok': False, 'status': resp.status_code, 'body': parsed, 'headers': headers}, status=resp.status_code)
+
     return Response({'ok': True, 'status': resp.status_code, 'body': body, 'headers': headers})
 
 @csrf_exempt
@@ -1020,8 +1053,17 @@ def integrations_create_table_from_es(request):
                     provided_sql = meta.get('sql_type') if isinstance(meta, dict) else None
                     sql_t = provided_sql or es_to_pg(meta or {})
                     resp_cols.append({'orig_name': orig, 'colname': colname, 'sql_type': sql_t})
-                # Optionally persist inferred mapping to a file named after the table
+                # Persist inferred mapping to ESMapping model (database) and optionally save to disk
                 saved_path = None
+                try:
+                    from .models import ESMapping
+                    try:
+                        em, created = ESMapping.objects.update_or_create(index=index, table=table, defaults={'columns': resp_cols})
+                    except Exception:
+                        em = None
+                except Exception:
+                    em = None
+
                 try:
                     save_to_file = bool(data.get('save_to_file'))
                 except Exception:
@@ -1365,13 +1407,24 @@ def integrations_preview_es_mapping(request):
                 sql_t = es_to_pg(meta or {})
             out_cols.append({'orig_name': orig, 'colname': colname, 'es_type': es_t, 'sql_type': sql_t, 'sample': samples.get(orig)})
 
-        # Optional: persist preview to a file if requested
+        # Persist preview mapping to ESMapping model when `table` provided; optionally write file if requested
         try:
             save_to_file = bool(data.get('save_to_file'))
         except Exception:
             save_to_file = False
         filename = data.get('filename') or None
         saved_path = None
+        table = data.get('table')
+        if table:
+            try:
+                from .models import ESMapping
+                try:
+                    ESMapping.objects.update_or_create(index=index, table=table, defaults={'columns': out_cols})
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
         if save_to_file or filename:
             import os, json
             # ensure directory exists under the integrations app
