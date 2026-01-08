@@ -372,8 +372,11 @@ export default function Orchestrator(){
                     <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>{String(c.es_type || '')}</td>
                     <td style={{ padding: 6, borderBottom: '1px solid #f6f6f6' }}>
                       {(() => {
-                        const targetType = form.getFieldValue('dest_integration')
-                        const options = targetType === 'mysql' || targetType === 'mysql' ? MYSQL_TYPE_OPTIONS : PG_TYPE_OPTIONS
+                        // look up selected destination integration type and choose SQL type options accordingly
+                        const targetIntegrationId = form.getFieldValue('dest_integration')
+                        const targetIntegration = integrations.find((x:any)=> x.id === targetIntegrationId)
+                        const targetType = (targetIntegration && (targetIntegration.type || '').toString().toLowerCase()) || ''
+                        const options = (targetType === 'mysql' || targetType === 'mariadb') ? MYSQL_TYPE_OPTIONS : PG_TYPE_OPTIONS
                         const value = c.sql_type || (options.length ? options[0] : '')
                         return (
                           <Select value={value} style={{ minWidth: 180 }} onChange={(val:any)=>{ const copy = editedColumns.slice(); copy[i] = { ...copy[i], sql_type: val }; setEditedColumns(copy) }}>
@@ -510,7 +513,20 @@ export default function Orchestrator(){
           </Form.Item>
           <Form.Item name="dest_integration" label="Destination Integration (Database)">
             <Select allowClear>
-              {integrations.filter(i=>['postgresql','mysql'].includes(i.type)).map(it => (<Select.Option key={it.id} value={it.id}>{it.name}</Select.Option>))}
+              {
+                integrations
+                  .filter(i=>{
+                    if(!i) return false
+                    const t = (i.type || '').toString().toLowerCase()
+                    // accept common type strings as DB integrations
+                    if(['postgresql','postgres','mysql'].includes(t)) return true
+                    // or heuristics: presence of DB config fields
+                    const cfg = i.config || {}
+                    if(cfg.conn_str || cfg.dbname || cfg.database || cfg.django_db) return true
+                    return false
+                  })
+                  .map(it => (<Select.Option key={it.id} value={it.id}>{it.name}</Select.Option>))
+              }
             </Select>
           </Form.Item>
           <Form.Item label="Destination table (optional)">

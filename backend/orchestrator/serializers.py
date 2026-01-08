@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Task, TaskRun
+from .models import Task, TaskRun, TaskRequestLog
 
 # -----------------------------
 # 中文注释：
@@ -21,4 +21,10 @@ class TaskSerializer(serializers.ModelSerializer):
     runs = TaskRunSerializer(many=True, read_only=True)
     class Meta:
         model = Task
+        fields = '__all__'
+
+
+class TaskRequestLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskRequestLog
         fields = '__all__'

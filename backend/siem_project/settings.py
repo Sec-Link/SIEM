@@ -59,10 +59,10 @@ WSGI_APPLICATION = 'siem_project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'siem_db',
-        'USER': 'siem_user',
-        'PASSWORD': 'siem_password',
-        'HOST': 'localhost',  # Use 'db' if running in Docker, or 'localhost' if running locally
+        'NAME': 'testdb',
+        'USER': 'testuser',
+        'PASSWORD': 'testpass',
+        'HOST': '192.168.31.33',  # Use 'db' if running in Docker, or 'localhost' if running locally
         'PORT': '5432',
     }
 }
@@ -134,3 +134,8 @@ LOGGING = {
         },
     }
 }
+
+# When False, server-side code will avoid writing config/mapping/request logs to disk
+# and will prefer storing them in the database. Set to True only if you need file
+# artifacts for debugging or external runners.
+WRITE_CONFIG_TO_DISK = False

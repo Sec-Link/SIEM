@@ -12,7 +12,7 @@ from datasource.views import query_preview
 from integrations.views import test_es_connection
 from integrations.views import IntegrationViewSet, preview_es_index
 from integrations.views import integrations_db_tables, integrations_create_table, integrations_create_table_from_es, integrations_preview_es_mapping
-from orchestrator.views import TaskViewSet, TaskRunViewSet
+from orchestrator.views import TaskViewSet, TaskRunViewSet, TaskRequestLogViewSet
 
 
 router = routers.DefaultRouter()
@@ -21,6 +21,7 @@ router.register(r'datasources', DataSourceViewSet, basename='datasource')
 router.register(r'integrations', IntegrationViewSet, basename='integration')
 router.register(r'tasks', TaskViewSet, basename='task')
 router.register(r'task_runs', TaskRunViewSet, basename='taskrun')
+router.register(r'task_request_logs', TaskRequestLogViewSet, basename='taskrequestlog')
 
 urlpatterns = [
     path('admin/', admin.site.urls),

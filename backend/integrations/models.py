@@ -40,6 +40,26 @@ class Integration(models.Model):
         # 字符串表示，便于在 admin/日志中查看
         return f"{self.name} ({self.type})"
 
+class ESMapping(models.Model):
+    """Persisted mapping between an Elasticsearch index and a target SQL table.
+
+    Fields:
+    - index: ES index name
+    - table: target SQL table name
+    - columns: list of column descriptors [{ orig_name, colname, sql_type }, ...]
+    - created_at
+    """
+    index = models.CharField(max_length=256, db_index=True)
+    table = models.CharField(max_length=256, db_index=True)
+    columns = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('index', 'table')
+
+    def __str__(self):
+        return f"ESMapping({self.index} -> {self.table})"
+
     # 以下是与 DB 集成相关的帮助函数（用于构造或读取连接信息）
     def is_db(self):
         # 判断当前集成类型是否为数据库类（Postgres / MySQL）
